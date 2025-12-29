@@ -4,8 +4,8 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")   // runtime (6543)
-  directUrl = env("DIRECT_URL")     // migrations (5432)
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum TransactionType {
@@ -18,34 +18,68 @@ model User {
   email        String   @unique
   name         String
   phone        String?
-  avatar String?
+  avatar       String?
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   transactions Transaction[]
+  contacts     Contact[]
 }
-
 
 model Transaction {
-  id           String          @id @default(uuid())
-  userId       String
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  title        String
-  amount       Float
-  type         TransactionType
-  category     String
-  date         DateTime
-  notes        String?
-  tags         String[]        @default([])
-  receiptImage String?
-  clientName   String?
-  projectTitle String?
-  splits       Json?
+  title     String
+  amount    Float
+  type      TransactionType
+  category  String
 
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  date      DateTime
+  dueDate   DateTime?
+  isPaid    Boolean @default(true)
 
-  @@index([userId, date])
+  clientName    String?
+  projectTitle  String?
+  tags          String[] @default([])
+  notes         String?
+  receiptImage  String?
+  receiptPublicId  String?
+
+  splits    TransactionSplit[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
+
+
+model TransactionSplit {
+  id             String   @id @default(uuid())
+  transactionId  String
+  transaction    Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  participantId  String
+  participant    Contact @relation(fields: [participantId], references: [id])
+
+  amount         Float
+  isPaid         Boolean @default(false)
+
+  createdAt      DateTime @default(now())
+}
+
+model Contact {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+
+  splits    TransactionSplit[]
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+

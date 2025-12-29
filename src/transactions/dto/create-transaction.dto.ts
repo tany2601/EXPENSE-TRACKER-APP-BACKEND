@@ -1,25 +1,33 @@
+import {
+  IsString,
+  IsNumber,
+  IsEnum,
+  IsOptional,
+  IsISO8601,
+  IsBoolean,
+  IsArray,
+} from "class-validator";
+import { TransactionType } from "@prisma/client";
 
-import { IsString, IsNumber, IsEnum, IsOptional, IsNotEmpty, IsISO8601, Min, IsArray } from 'class-validator';
+export class CreateTransactionSplitDto {
+  @IsString()
+  participantId: string;
 
-export enum TransactionType {
-  INCOME = 'INCOME',
-  EXPENSE = 'EXPENSE'
+  @IsNumber()
+  amount: number;
 }
 
 export class CreateTransactionDto {
   @IsString()
-  @IsNotEmpty()
   title: string;
 
   @IsNumber()
-  @Min(0.01)
   amount: number;
 
   @IsEnum(TransactionType)
   type: TransactionType;
 
   @IsString()
-  @IsNotEmpty()
   category: string;
 
   @IsISO8601()
@@ -30,8 +38,8 @@ export class CreateTransactionDto {
   dueDate?: string;
 
   @IsOptional()
-  @IsString()
-  receiptImage?: string;
+  @IsBoolean()
+  isPaid?: boolean;
 
   @IsOptional()
   @IsString()
@@ -42,6 +50,23 @@ export class CreateTransactionDto {
   projectTitle?: string;
 
   @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @IsOptional()
   @IsArray()
-  splits?: any[];
+  tags?: string[];
+
+  // 🔥 Cloudinary
+  @IsOptional()
+  @IsString()
+  receiptImage?: string;
+
+  @IsOptional()
+  @IsString()
+  receiptPublicId?: string;
+
+  @IsOptional()
+  @IsArray()
+  splits?: CreateTransactionSplitDto[];
 }
