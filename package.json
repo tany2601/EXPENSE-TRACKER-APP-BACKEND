@@ -1,14 +1,14 @@
-
 {
   "name": "lumina-backend",
   "version": "1.0.0",
   "description": "Production-ready backend for Lumina Finance",
-  "main": "main.js",
+  "main": "dist/main.js",
   "scripts": {
     "start": "nest start",
     "start:dev": "nest start --watch",
     "build": "nest build",
-    "prod": "node dist/main"
+    "prod": "node dist/main",
+    "start:prod": "node dist/main.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
