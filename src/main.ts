@@ -10,6 +10,21 @@ async function bootstrap() {
   // Security Headers
   app.use(helmet());
 
+  const corsOrigins = (process.env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  app.enableCors({
+    origin: corsOrigins.length ? corsOrigins : [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'capacitor://localhost',
+      'http://localhost',
+    ],
+    credentials: true,
+  });
+
   // Strict CORS - Only allow the app's frontend
   app.enableCors({
     origin: [

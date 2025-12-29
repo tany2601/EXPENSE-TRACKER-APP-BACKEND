@@ -1,0 +1,66 @@
+# ===============================
+# Node & Package Managers
+# ===============================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===============================
+# Build Output
+# ===============================
+dist/
+build/
+coverage/
+
+# ===============================
+# Environment Files (CRITICAL)
+# ===============================
+.env
+.env.*
+!.env.example
+
+# ===============================
+# Logs
+# ===============================
+logs/
+*.log
+
+# ===============================
+# OS / Editor Files
+# ===============================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# ===============================
+# TypeScript
+# ===============================
+*.tsbuildinfo
+
+# ===============================
+# NestJS
+# ===============================
+.cache/
+.nest/
+
+# ===============================
+# Testing
+# ===============================
+test-results/
+jest-html-reporters-attach/
+
+# ===============================
+# Prisma / DB (if added later)
+# ===============================
+prisma/dev.db
+prisma/*.db
+prisma/*.db-journal
+
+# ===============================
+# Docker (optional)
+# ===============================
+docker-data/
