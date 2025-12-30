@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Production-ready backend for Lumina Finance",
   "main": "dist/main.js",
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "scripts": {
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -39,6 +42,7 @@
     "@types/node": "^20.0.0",
     "@types/passport-jwt": "^4.0.0",
     "prisma": "^6.15.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.0.0"
   }
 }

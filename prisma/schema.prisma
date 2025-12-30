@@ -25,6 +25,7 @@ model User {
 
   transactions Transaction[]
   contacts     Contact[]
+  categories Category[]
 }
 
 model Transaction {
@@ -83,3 +84,15 @@ model Contact {
   @@index([userId])
 }
 
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  iconName  String
+  color     String
+  isDefault Boolean  @default(false)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([name, userId])
+}
