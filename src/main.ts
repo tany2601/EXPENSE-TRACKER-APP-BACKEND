@@ -23,6 +23,8 @@ async function bootstrap() {
         'http://localhost:8080',
         'http://localhost:3000',
         'capacitor://localhost',
+        'https://localhost',          // ✅ ADD THIS
+        'ionic://localhost', 
         'http://localhost',
       ],
     credentials: true,
