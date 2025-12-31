@@ -96,3 +96,11 @@ model Category {
 
   @@unique([name, userId])
 }
+
+model PasswordResetOtp {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  otpHash    String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}

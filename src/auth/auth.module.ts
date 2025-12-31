@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
 import { JwtStrategy } from './jwt.strategy';
+import { MailModule } from 'src/mail/mail.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { JwtStrategy } from './jwt.strategy';
       secret: process.env.JWT_SECRET || 'lumina_secret_key_2025', // Use env in real prod
       signOptions: { expiresIn: '7d' },
     }),
+    MailModule
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
