@@ -5,6 +5,9 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { deleteAvatar } from "../cloudinary/cloudinary.utils";
+import { join } from "path";
+import * as fs from "fs";
+
 
 @Injectable()
 export class UsersService {
@@ -126,4 +129,38 @@ export class UsersService {
 
     return { success: true };
   }
+
+  async exportUserData(userId: string) {
+  const user = await this.prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      transactions: {
+        include: {
+          splits: true,
+        },
+      },
+      contacts: true,
+      categories: true,
+    },
+  });
+
+  if (!user) throw new ForbiddenException();
+
+  return {
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      avatar: user.avatar,
+      createdAt: user.createdAt,
+    },
+    transactions: user.transactions,
+    contacts: user.contacts,
+    categories: user.categories,
+    exportedAt: new Date().toISOString(),
+  };
+}
+
+
 }

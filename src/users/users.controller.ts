@@ -20,10 +20,6 @@ import { avatarStorage } from "../cloudinary/avatar.storage";
 export class UsersController {
   constructor(private usersService: UsersService) {}
 
-
-
-
-
   @Get("me")
   async me(@Request() req: any) {
     return this.usersService.getPublicProfile(req.user.id);
@@ -34,8 +30,10 @@ export class UsersController {
     return this.usersService.updateMe(req.user.id, body);
   }
 
-
-
+  @Get("export")
+  exportData(@Request() req: any) {
+    return this.usersService.exportUserData(req.user.id);
+  }
 
   @Post("upload-avatar")
   @UseInterceptors(
@@ -48,15 +46,10 @@ export class UsersController {
     return { url: file.path };
   }
 
-
-
   @Delete("avatar")
   removeAvatar(@Request() req: any) {
     return this.usersService.removeAvatar(req.user.id);
   }
-
-
-
 
   @Delete("me")
   deleteAccount(@Request() req: any) {
