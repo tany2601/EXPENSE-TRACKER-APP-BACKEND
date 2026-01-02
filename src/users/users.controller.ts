@@ -55,4 +55,15 @@ export class UsersController {
   deleteAccount(@Request() req: any) {
     return this.usersService.deleteAccount(req.user.id);
   }
+
+  
+  @Post("verify-password")
+  async verifyPassword(
+    @Request() req: any,
+    @Body("password") password: string
+  ) {
+    await this.usersService.verifyPassword(req.user.id, password);
+    return { ok: true };
+  }
+
 }

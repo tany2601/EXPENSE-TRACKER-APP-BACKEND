@@ -7,6 +7,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { deleteAvatar } from "../cloudinary/cloudinary.utils";
 import { join } from "path";
 import * as fs from "fs";
+import * as bcrypt from "bcryptjs";
+import { UnauthorizedException } from "@nestjs/common";
 
 @Injectable()
 export class UsersService {
@@ -184,5 +186,23 @@ export class UsersService {
       where: { email },
       data: { passwordHash },
     });
+  }
+
+  async verifyPassword(userId: string, password: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException();
+    }
+
+    const isValid = await bcrypt.compare(password, user.passwordHash);
+
+    if (!isValid) {
+      throw new UnauthorizedException("Invalid password");
+    }
+
+    return true;
   }
 }
