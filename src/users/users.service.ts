@@ -205,4 +205,13 @@ export class UsersService {
 
     return true;
   }
+
+  async resetTransactions(userId: string) {
+  await this.prisma.transaction.deleteMany({
+    where: { userId },
+  });
+
+  return { success: true };
+}
+
 }

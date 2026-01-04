@@ -9,6 +9,7 @@ import {
   Post,
   UploadedFile,
   UseInterceptors,
+  Req,
 } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { UsersService } from "./users.service";
@@ -65,5 +66,12 @@ export class UsersController {
     await this.usersService.verifyPassword(req.user.id, password);
     return { ok: true };
   }
+
+  @UseGuards(JwtAuthGuard)
+@Delete("reset-transactions")
+resetTransactions(@Req() req) {
+  return this.usersService.resetTransactions(req.user.id);
+}
+
 
 }
