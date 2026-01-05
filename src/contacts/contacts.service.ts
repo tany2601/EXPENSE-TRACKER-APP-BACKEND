@@ -20,4 +20,17 @@ export class ContactsService {
       },
     });
   }
+
+  async update(userId: string, id: string, name: string) {
+    return this.prisma.contact.updateMany({
+      where: { id, userId },
+      data: { name },
+    });
+  }
+
+  async delete(userId: string, id: string) {
+    return this.prisma.contact.deleteMany({
+      where: { id, userId },
+    });
+  }
 }
