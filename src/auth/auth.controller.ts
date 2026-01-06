@@ -30,7 +30,7 @@ export class AuthController {
 
   @Post("forgot-password")
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
-    await this.authService.sendPasswordResetOtp(dto.email);
+    await this.authService.sendOtp(dto.email, "PASSWORD_RESET");
     return { ok: true };
   }
 
@@ -40,13 +40,24 @@ export class AuthController {
     return { userId: req.user.id, email: req.user.email };
   }
 
-  @Post("verify-reset-otp")
-  async verifyResetOtp(@Body() dto: VerifyResetOtpDto) {
-    return this.authService.verifyPasswordResetOtp(dto.email, dto.otp);
-  }
-
   @Post("reset-password")
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.resetToken, dto.newPassword);
+  }
+
+  @Post("send-otp")
+  async sendOtp(@Body() body: { email: string; type: string }) {
+    await this.authService.sendOtp(body.email, body.type as any);
+    return { ok: true };
+  }
+
+  @Post("verify-otp")
+  async verifyOtp(@Body() body: { email: string; otp: string; type: string }) {
+    return this.authService.verifyOtp(body.email, body.otp, body.type as any);
+  }
+
+  @Post("issue-reset-token")
+  async issueResetToken(@Body() body: { email: string }) {
+    return this.authService.issueResetToken(body.email);
   }
 }

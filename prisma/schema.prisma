@@ -97,10 +97,13 @@ model Category {
   @@unique([name, userId])
 }
 
-model PasswordResetOtp {
-  id         String   @id @default(uuid())
-  email      String   @unique
+model EmailOtp {
+  email      String
+  type       String   // "PASSWORD_RESET" | "EMAIL_VERIFY"
   otpHash    String
   expiresAt  DateTime
   createdAt  DateTime @default(now())
+
+  @@id([email, type])
 }
+

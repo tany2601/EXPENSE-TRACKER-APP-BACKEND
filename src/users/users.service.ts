@@ -19,7 +19,11 @@ export class UsersService {
   // -------------------------
 
   findByEmail(email: string) {
-    return this.prisma.user.findUnique({ where: { email } });
+    return this.prisma.user.findUnique({
+      where: {
+        email: email.toLowerCase().trim(),
+      },
+    });
   }
 
   create(data: {
@@ -158,32 +162,22 @@ export class UsersService {
       exportedAt: new Date().toISOString(),
     };
   }
-  async upsertPasswordResetOtp(
+  async upsertEmailOtp(
     email: string,
+    type: "PASSWORD_RESET" | "EMAIL_VERIFY",
     otpHash: string,
     expiresAt: Date
   ) {
-    return this.prisma.passwordResetOtp.upsert({
-      where: { email },
+    return this.prisma.emailOtp.upsert({
+      where: { email_type: { email, type } },
       update: { otpHash, expiresAt },
-      create: { email, otpHash, expiresAt },
-    });
-  }
-  async findPasswordResetOtp(email: string) {
-    return this.prisma.passwordResetOtp.findUnique({
-      where: { email },
-    });
-  }
-
-  async deletePasswordResetOtp(email: string) {
-    return this.prisma.passwordResetOtp.delete({
-      where: { email },
+      create: { email, type, otpHash, expiresAt },
     });
   }
 
   async updatePasswordByEmail(email: string, passwordHash: string) {
     return this.prisma.user.update({
-      where: { email },
+      where: { email: email.toLowerCase().trim() },
       data: { passwordHash },
     });
   }
@@ -207,11 +201,22 @@ export class UsersService {
   }
 
   async resetTransactions(userId: string) {
-  await this.prisma.transaction.deleteMany({
-    where: { userId },
-  });
+    await this.prisma.transaction.deleteMany({
+      where: { userId },
+    });
 
-  return { success: true };
-}
+    return { success: true };
+  }
 
+  async findEmailOtp(email: string, type: "PASSWORD_RESET" | "EMAIL_VERIFY") {
+    return this.prisma.emailOtp.findUnique({
+      where: { email_type: { email, type } },
+    });
+  }
+
+  async deleteEmailOtp(email: string, type: "PASSWORD_RESET" | "EMAIL_VERIFY") {
+    return this.prisma.emailOtp.delete({
+      where: { email_type: { email, type } },
+    });
+  }
 }
