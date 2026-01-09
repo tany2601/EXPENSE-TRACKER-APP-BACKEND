@@ -1,109 +1,117 @@
-generator client {
-  provider = "prisma-client-js"
-}
+  generator client {
+    provider = "prisma-client-js"
+  }
 
-datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
-}
+  datasource db {
+    provider  = "postgresql"
+    url       = env("DATABASE_URL")
+    directUrl = env("DIRECT_URL")
+  }
 
-enum TransactionType {
-  INCOME
-  EXPENSE
-}
+  enum TransactionType {
+    INCOME
+    EXPENSE
+  }
 
-model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  name         String
-  phone        String?
-  avatar       String?
-  passwordHash String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  model User {
+    id           String   @id @default(uuid())
+    email        String   @unique
+    name         String
+    phone        String?
+    avatar       String?
+    passwordHash String
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
 
-  transactions Transaction[]
-  contacts     Contact[]
-  categories Category[]
-}
+    transactions Transaction[]
+    contacts     Contact[]
+    categories Category[]
+  }
 
-model Transaction {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  model Transaction {
+    id        String   @id @default(uuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  title     String
-  amount    Float
-  type      TransactionType
-  category  String
+    title     String
+    amount    Float
+    type      TransactionType
+    category  String
 
-  date      DateTime
-  dueDate   DateTime?
-  isPaid    Boolean @default(true)
+    date      DateTime
+    dueDate   DateTime?
+    isPaid    Boolean @default(true)
 
-  clientName    String?
-  projectTitle  String?
-  tags          String[] @default([])
-  notes         String?
-  receiptImage  String?
-  receiptPublicId  String?
+    clientName    String?
+    projectTitle  String?
+    tags          String[] @default([])
+    notes         String?
+    receiptImage  String?
+    receiptPublicId  String?
 
-  splits    TransactionSplit[]
+    splits    TransactionSplit[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+    // ✅ NEW: client timestamp used for conflict checks
+    clientUpdatedAt DateTime?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+      // Soft delete (tombstone)
+  deletedAt         DateTime?
+  deletedByDeviceId String?
+
+  }
 
 
-model TransactionSplit {
-  id             String   @id @default(uuid())
-  transactionId  String
-  transaction    Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 
-  participantId  String
-  participant    Contact @relation(fields: [participantId], references: [id])
+  model TransactionSplit {
+    id             String   @id @default(uuid())
+    transactionId  String
+    transaction    Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 
-  amount         Float
-  isPaid         Boolean @default(false)
+    participantId  String
+    participant    Contact @relation(fields: [participantId], references: [id])
 
-  createdAt      DateTime @default(now())
-}
+    amount         Float
+    isPaid         Boolean @default(false)
 
-model Contact {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    createdAt      DateTime @default(now())
+  }
 
-  name      String
+  model Contact {
+    id        String   @id @default(uuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  splits    TransactionSplit[]
+    name      String
 
-  createdAt DateTime @default(now())
+    splits    TransactionSplit[]
 
-  @@index([userId])
-}
+    createdAt DateTime @default(now())
 
-model Category {
-  id        String   @id @default(uuid())
-  name      String
-  iconName  String
-  color     String
-  isDefault Boolean  @default(false)
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
+    @@index([userId])
+  }
 
-  @@unique([name, userId])
-}
+  model Category {
+    id        String   @id @default(uuid())
+    name      String
+    iconName  String
+    color     String
+    isDefault Boolean  @default(false)
+    userId    String?
+    user      User?    @relation(fields: [userId], references: [id])
+    createdAt DateTime @default(now())
 
-model EmailOtp {
-  email      String
-  type       String   // "PASSWORD_RESET" | "EMAIL_VERIFY"
-  otpHash    String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
+    @@unique([name, userId])
+  }
 
-  @@id([email, type])
-}
+  model EmailOtp {
+    email      String
+    type       String   // "PASSWORD_RESET" | "EMAIL_VERIFY"
+    otpHash    String
+    expiresAt  DateTime
+    createdAt  DateTime @default(now())
+
+    @@id([email, type])
+  }
 
