@@ -91,7 +91,7 @@ export class SyncService {
           { deletedAt: { gt: since } },
         ],
       },
-      orderBy: { updatedAt: "asc" },
+      orderBy: { updatedAt: "desc" },
       take: safeLimit,
       include: { splits: true },
     });
