@@ -256,7 +256,7 @@ export class SyncService {
     const existingTs = existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
 
     // Older/equal delete should not win
-    if (clientTs <= existingTs) return "ignored";
+    if (clientTs < existingTs) return "ignored";
 
     // Cloudinary cleanup once (optional)
     if (existing.receiptPublicId) {
