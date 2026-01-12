@@ -24,11 +24,14 @@ export class SyncService {
    * - safe to retry (idempotent)
    * - conflict rule: last-write-wins based on clientUpdatedAt (fallback: payload.updatedAt)
    */
-  async push(userId: string, deviceId: string, ops: SyncOpDto[]): Promise<PushResult> {
+  async push(
+    userId: string,
+    deviceId: string,
+    ops: SyncOpDto[]
+  ): Promise<PushResult> {
     const applied: string[] = [];
     const ignored: string[] = [];
     const failed: Array<{ entityId: string; reason: string }> = [];
-    
 
     for (const op of ops) {
       try {
@@ -48,13 +51,22 @@ export class SyncService {
         if (op.op === SyncOpType.DELETE) {
           // For now, your DTO sends updatedAt; later you can switch to clientUpdatedAt
           const deleteTs = this.parseClientTs(op.payload);
-          const res = await this.applyDeleteTransaction(userId, deviceId, op.entityId, deleteTs);
+          const res = await this.applyDeleteTransaction(
+            userId,
+            deviceId,
+            op.entityId,
+            deleteTs
+          );
           (res === "applied" ? applied : ignored).push(op.entityId);
           continue;
         }
 
         if (op.op === SyncOpType.UPSERT) {
-          const res = await this.applyUpsertTransaction(userId, deviceId, op.payload);
+          const res = await this.applyUpsertTransaction(
+            userId,
+            deviceId,
+            op.payload
+          );
           (res === "applied" ? applied : ignored).push(op.entityId);
           continue;
         }
@@ -78,7 +90,9 @@ export class SyncService {
   async pull(userId: string, sinceIso?: string, limit = 500) {
     const since = sinceIso ? new Date(sinceIso) : new Date(0);
     if (Number.isNaN(since.getTime())) {
-      throw new BadRequestException("since must be a valid ISO 8601 date string");
+      throw new BadRequestException(
+        "since must be a valid ISO 8601 date string"
+      );
     }
 
     const safeLimit = Math.min(Math.max(limit || 500, 1), 2000);
@@ -86,10 +100,7 @@ export class SyncService {
     const transactions = await this.prisma.transaction.findMany({
       where: {
         userId,
-        OR: [
-          { updatedAt: { gt: since } },
-          { deletedAt: { gt: since } },
-        ],
+        OR: [{ updatedAt: { gt: since } }, { deletedAt: { gt: since } }],
       },
       orderBy: { updatedAt: "desc" },
       take: safeLimit,
@@ -123,7 +134,8 @@ export class SyncService {
       throw new ForbiddenException();
     }
 
-    const existingTs = existing?.clientUpdatedAt ?? existing?.updatedAt ?? new Date(0);
+    const existingTs =
+      existing?.clientUpdatedAt ?? existing?.updatedAt ?? new Date(0);
 
     // Ignore old/equal writes (idempotent)
     if (existing && incomingClientUpdatedAt <= existingTs) {
@@ -133,7 +145,11 @@ export class SyncService {
     // If server already tombstoned it, prevent resurrection from older client ops
     // Allow "restore" only if incoming is newer than the tombstone timestamp
     const isDeletedOnServer = !!existing?.deletedAt;
-    if (existing && isDeletedOnServer && incomingClientUpdatedAt <= existingTs) {
+    if (
+      existing &&
+      isDeletedOnServer &&
+      incomingClientUpdatedAt <= existingTs
+    ) {
       return "ignored";
     }
 
@@ -167,20 +183,28 @@ export class SyncService {
       clientUpdatedAt: incomingClientUpdatedAt,
 
       // ✅ If incoming is newer, allow "restore" (optional but recommended)
-      deletedAt: null,
-      deletedByDeviceId: null,
+      // ✅ PRESERVE TOMBSTONE
+      deletedAt: existing?.deletedAt ?? null,
+      deletedByDeviceId: existing?.deletedByDeviceId ?? null,
     };
 
     // Validate required date fields
     if (Number.isNaN(baseData.date.getTime())) {
-      throw new BadRequestException("payload.date must be a valid ISO 8601 date string");
+      throw new BadRequestException(
+        "payload.date must be a valid ISO 8601 date string"
+      );
     }
     if (baseData.dueDate && Number.isNaN(baseData.dueDate.getTime())) {
-      throw new BadRequestException("payload.dueDate must be a valid ISO 8601 date string");
+      throw new BadRequestException(
+        "payload.dueDate must be a valid ISO 8601 date string"
+      );
     }
 
     // Build safe splits
-    const safeSplits = await this.filterSplitsByExistingContacts(userId, payload.splits);
+    const safeSplits = await this.filterSplitsByExistingContacts(
+      userId,
+      payload.splits
+    );
 
     const splitsCreate =
       Array.isArray(safeSplits) && safeSplits.length
@@ -195,24 +219,27 @@ export class SyncService {
           }
         : undefined;
 
-    const splitsReplace =
-      Array.isArray(safeSplits)
-        ? {
-            deleteMany: {},
-            createMany: {
-              data: safeSplits.map((s: any) => ({
-                participantId: s.participantId,
-                amount: s.amount,
-                isPaid: s.isPaid ?? false,
-              })),
-            },
-          }
-        : undefined;
+    const splitsReplace = Array.isArray(safeSplits)
+      ? {
+          deleteMany: {},
+          createMany: {
+            data: safeSplits.map((s: any) => ({
+              participantId: s.participantId,
+              amount: s.amount,
+              isPaid: s.isPaid ?? false,
+            })),
+          },
+        }
+      : undefined;
 
     if (!existing) {
-      const createdAt = payload.createdAt ? new Date(payload.createdAt) : new Date();
+      const createdAt = payload.createdAt
+        ? new Date(payload.createdAt)
+        : new Date();
       if (Number.isNaN(createdAt.getTime())) {
-        throw new BadRequestException("payload.createdAt must be a valid ISO 8601 date string");
+        throw new BadRequestException(
+          "payload.createdAt must be a valid ISO 8601 date string"
+        );
       }
 
       await this.prisma.transaction.create({
@@ -249,11 +276,14 @@ export class SyncService {
     id: string,
     clientTs: Date
   ): Promise<"applied" | "ignored"> {
-    const existing = await this.prisma.transaction.findUnique({ where: { id } });
+    const existing = await this.prisma.transaction.findUnique({
+      where: { id },
+    });
     if (!existing) return "ignored"; // idempotent: nothing to delete
     if (existing.userId !== userId) throw new ForbiddenException();
 
-    const existingTs = existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
+    const existingTs =
+      existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
 
     // Older/equal delete should not win
     if (clientTs < existingTs) return "ignored";
@@ -323,22 +353,22 @@ export class SyncService {
     }
   }
   private validatePayload(op: SyncOpDto) {
-  if (op.op === SyncOpType.DELETE) {
-    if (!op.payload?.id) throw new BadRequestException("DELETE payload.id required");
-    // updatedAt or clientUpdatedAt recommended
-    return;
-  }
-
-  if (op.op === SyncOpType.UPSERT) {
-    const p = op.payload;
-    const required = ["id", "title", "amount", "type", "category", "date"];
-    for (const k of required) {
-      if (p?.[k] === undefined || p?.[k] === null || p?.[k] === "") {
-        throw new BadRequestException(`UPSERT payload.${k} required`);
-      }
+    if (op.op === SyncOpType.DELETE) {
+      if (!op.payload?.id)
+        throw new BadRequestException("DELETE payload.id required");
+      // updatedAt or clientUpdatedAt recommended
+      return;
     }
-    return;
-  }
-}
 
+    if (op.op === SyncOpType.UPSERT) {
+      const p = op.payload;
+      const required = ["id", "title", "amount", "type", "category", "date"];
+      for (const k of required) {
+        if (p?.[k] === undefined || p?.[k] === null || p?.[k] === "") {
+          throw new BadRequestException(`UPSERT payload.${k} required`);
+        }
+      }
+      return;
+    }
+  }
 }
