@@ -1,3 +1,4 @@
+// src/categories/categories.service.ts
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "src/prisma/prisma.service";
 import { CreateCategoryDto } from "./dto/create-category.dto";
@@ -10,6 +11,7 @@ export class CategoriesService {
   getAll(userId: string) {
     return this.prisma.category.findMany({
       where: {
+        deletedAt: null,
         OR: [{ isDefault: true, userId: null }, { userId }],
       },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
@@ -22,20 +24,28 @@ export class CategoriesService {
         ...dto,
         userId,
         isDefault: false,
+        clientUpdatedAt: new Date(),
       },
     });
   }
 
   update(userId: string, id: string, dto: UpdateCategoryDto) {
+    // prevents editing defaults
     return this.prisma.category.updateMany({
-      where: { id, userId }, // prevents editing defaults
-      data: dto,
+      where: { id, userId, isDefault: false, deletedAt: null },
+      data: { ...dto, clientUpdatedAt: new Date() },
     });
   }
 
   delete(userId: string, id: string) {
-    return this.prisma.category.deleteMany({
-      where: { id, userId }, // prevents deleting defaults
+    // prevent deleting defaults AND soft-delete custom categories
+    return this.prisma.category.updateMany({
+      where: { id, userId, isDefault: false, deletedAt: null },
+      data: {
+        deletedAt: new Date(),
+        deletedByDeviceId: "web",
+        clientUpdatedAt: new Date(),
+      },
     });
   }
 }

@@ -78,32 +78,49 @@
     createdAt      DateTime @default(now())
   }
 
-  model Contact {
-    id        String   @id @default(uuid())
-    userId    String
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model Contact {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    name      String
+  name      String
 
-    splits    TransactionSplit[]
+  splits    TransactionSplit[]
 
-    createdAt DateTime @default(now())
+  // ✅ conflict + sync
+  clientUpdatedAt DateTime?
+  updatedAt       DateTime @updatedAt
 
-    @@index([userId])
-  }
+  // ✅ tombstone
+  deletedAt         DateTime?
+  deletedByDeviceId String?
 
-  model Category {
-    id        String   @id @default(uuid())
-    name      String
-    iconName  String
-    color     String
-    isDefault Boolean  @default(false)
-    userId    String?
-    user      User?    @relation(fields: [userId], references: [id])
-    createdAt DateTime @default(now())
+  createdAt DateTime @default(now())
 
-    @@unique([name, userId])
-  }
+  @@index([userId])
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  iconName  String
+  color     String
+  isDefault Boolean  @default(false)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  // ✅ conflict + sync
+  clientUpdatedAt DateTime?
+  updatedAt       DateTime @updatedAt
+
+  // ✅ tombstone
+  deletedAt         DateTime?
+  deletedByDeviceId String?
+
+  @@unique([name, userId])
+}
+
 
   model EmailOtp {
     email      String

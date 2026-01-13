@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Query, Request, UseGuards } from "@nestjs/common";
+// src/sync/sync.controller.ts
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Request,
+  UseGuards,
+} from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { SyncService } from "./sync.service";
 import { SyncPullQueryDto, SyncPushDto } from "./dto/sync.dto";
@@ -10,7 +19,6 @@ export class SyncController {
 
   @Post("push")
   async push(@Body() dto: SyncPushDto, @Request() req: any) {
-    // userId always from JWT, never from client
     return this.syncService.push(req.user.id, dto.deviceId, dto.ops);
   }
 

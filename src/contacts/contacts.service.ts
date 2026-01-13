@@ -1,3 +1,4 @@
+// src/contacts/contacts.service.ts
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -7,7 +8,7 @@ export class ContactsService {
 
   async findAll(userId: string) {
     return this.prisma.contact.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { createdAt: "asc" },
     });
   }
@@ -17,20 +18,28 @@ export class ContactsService {
       data: {
         userId,
         name,
+        clientUpdatedAt: new Date(),
       },
     });
   }
 
   async update(userId: string, id: string, name: string) {
     return this.prisma.contact.updateMany({
-      where: { id, userId },
-      data: { name },
+      where: { id, userId, deletedAt: null },
+      data: { name, clientUpdatedAt: new Date() },
     });
   }
 
   async delete(userId: string, id: string) {
-    return this.prisma.contact.deleteMany({
-      where: { id, userId },
+    await this.prisma.contact.updateMany({
+      where: { id, userId, deletedAt: null },
+      data: {
+        deletedAt: new Date(),
+        deletedByDeviceId: "web",
+        clientUpdatedAt: new Date(),
+      },
     });
+
+    return { success: true };
   }
 }

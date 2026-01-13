@@ -50,7 +50,7 @@ export class TransactionsService {
   // -------------------------
   async findAll(userId: string) {
     return this.prisma.transaction.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { date: "desc" },
       include: {
         splits: { include: { participant: true } },
@@ -115,19 +115,25 @@ export class TransactionsService {
   // -------------------------
   // Delete transaction
   // -------------------------
+  // transactions.service.ts
   async delete(id: string, userId: string) {
     const tx = await this.prisma.transaction.findUnique({ where: { id } });
+    if (!tx || tx.userId !== userId) throw new ForbiddenException();
 
-    if (!tx || tx.userId !== userId) {
-      throw new ForbiddenException();
-    }
-
-    // 🔥 Delete receipt from Cloudinary
     if (tx.receiptPublicId) {
       await cloudinary.uploader.destroy(tx.receiptPublicId);
     }
 
-    await this.prisma.transaction.delete({ where: { id } });
+    // ✅ SOFT DELETE so sync & pull works
+    await this.prisma.transaction.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        deletedByDeviceId: "web",
+        clientUpdatedAt: new Date(), // or new Date().toISOString() if your schema expects string (usually DateTime)
+      },
+    });
+
     return { success: true };
   }
 

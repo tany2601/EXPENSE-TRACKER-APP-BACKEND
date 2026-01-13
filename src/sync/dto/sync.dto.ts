@@ -4,26 +4,30 @@ import {
   IsBoolean,
   IsEnum,
   IsISO8601,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
-  ValidateNested,
-  Min,
   Max,
-  IsInt,
+  Min,
+  ValidateNested,
 } from "class-validator";
 import { Type } from "class-transformer";
 
 export enum SyncEntity {
   TRANSACTION = "transaction",
+  CONTACT = "contact",
+  CATEGORY = "category",
 }
 
 export enum SyncOpType {
   UPSERT = "UPSERT",
   DELETE = "DELETE",
 }
+
+/** ---------- Shared / Transaction DTOs ---------- */
 
 export class SplitDto {
   @IsUUID()
@@ -105,7 +109,7 @@ export class TransactionUpsertPayloadDto {
   @IsISO8601()
   clientUpdatedAt?: string;
 
-  // Backward compat: if clientUpdatedAt not sent, accept updatedAt
+  // Backward compat
   @IsOptional()
   @IsISO8601()
   updatedAt?: string;
@@ -116,13 +120,12 @@ export class TransactionUpsertPayloadDto {
 }
 
 /**
- * Minimal payload for DELETE
+ * Minimal payload for Transaction DELETE
  */
 export class TransactionDeletePayloadDto {
   @IsUUID()
   id: string;
 
-  // For conflict ordering; accept either clientUpdatedAt or updatedAt
   @IsOptional()
   @IsISO8601()
   clientUpdatedAt?: string;
@@ -132,11 +135,93 @@ export class TransactionDeletePayloadDto {
   updatedAt?: string;
 }
 
-/**
- * Operation DTO:
- * We keep payload as "any" validated by op type at runtime in service/controller.
- * (class-validator can't do perfect discriminated unions cleanly)
- */
+/** ---------- Contact DTOs ---------- */
+
+export class ContactUpsertPayloadDto {
+  @IsUUID()
+  id: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsOptional()
+  @IsISO8601()
+  clientUpdatedAt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  updatedAt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  createdAt?: string;
+}
+
+export class ContactDeletePayloadDto {
+  @IsUUID()
+  id: string;
+
+  @IsOptional()
+  @IsISO8601()
+  clientUpdatedAt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  updatedAt?: string;
+}
+
+/** ---------- Category DTOs ---------- */
+
+export class CategoryUpsertPayloadDto {
+  @IsUUID()
+  id: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsString()
+  @IsNotEmpty()
+  iconName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  color: string;
+
+  // client may send this, but server decides final behavior
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
+
+  @IsOptional()
+  @IsISO8601()
+  clientUpdatedAt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  updatedAt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  createdAt?: string;
+}
+
+export class CategoryDeletePayloadDto {
+  @IsUUID()
+  id: string;
+
+  @IsOptional()
+  @IsISO8601()
+  clientUpdatedAt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  updatedAt?: string;
+}
+
+/** ---------- Generic Sync DTOs ---------- */
+
 export class SyncOpDto {
   @IsEnum(SyncOpType)
   op: SyncOpType;
@@ -147,8 +232,12 @@ export class SyncOpDto {
   @IsUUID()
   entityId: string;
 
-  // payload validation is handled manually based on op in the service/controller
+  // validated in service based on entity+op
   payload: any;
+
+  @IsString()
+  @IsNotEmpty()
+  opId: string;
 }
 
 export class SyncPushDto {

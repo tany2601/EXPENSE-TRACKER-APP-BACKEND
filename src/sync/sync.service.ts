@@ -9,9 +9,11 @@ import { SyncEntity, SyncOpDto, SyncOpType } from "./dto/sync.dto";
 import cloudinary from "../cloudinary/cloudinary.config";
 
 type PushResult = {
-  applied: string[];
-  ignored: string[];
+  applied: string[]; // entityIds
+  ignored: string[]; // entityIds
   failed: Array<{ entityId: string; reason: string }>;
+  appliedOpIds: string[];
+  ignoredOpIds: string[];
   serverTime: string;
 };
 
@@ -32,46 +34,137 @@ export class SyncService {
     const applied: string[] = [];
     const ignored: string[] = [];
     const failed: Array<{ entityId: string; reason: string }> = [];
+    const appliedOpIds: string[] = [];
+    const ignoredOpIds: string[] = [];
 
     for (const op of ops) {
       try {
-        if (op.entity !== SyncEntity.TRANSACTION) {
-          throw new BadRequestException(`Unsupported entity: ${op.entity}`);
-        }
-
         if (!op.payload?.id) {
           throw new BadRequestException("payload.id is required");
         }
-
         if (op.entityId !== op.payload.id) {
           throw new BadRequestException("entityId must match payload.id");
         }
+
+        // entity+op specific validation
         this.validatePayload(op);
 
-        if (op.op === SyncOpType.DELETE) {
-          // For now, your DTO sends updatedAt; later you can switch to clientUpdatedAt
-          const deleteTs = this.parseClientTs(op.payload);
-          const res = await this.applyDeleteTransaction(
-            userId,
-            deviceId,
-            op.entityId,
-            deleteTs
-          );
-          (res === "applied" ? applied : ignored).push(op.entityId);
-          continue;
+        // --- Route by entity/op (TRANSACTION logic preserved) ---
+        if (op.entity === SyncEntity.TRANSACTION) {
+          if (op.op === SyncOpType.DELETE) {
+            const deleteTs = this.parseClientTs(op.payload);
+            const res = await this.applyDeleteTransaction(
+              userId,
+              deviceId,
+              op.entityId,
+              deleteTs
+            );
+            if (res === "applied") {
+              applied.push(op.entityId);
+              appliedOpIds.push(op.opId);
+            } else {
+              ignored.push(op.entityId);
+              ignoredOpIds.push(op.opId);
+            }
+            continue;
+          }
+
+          if (op.op === SyncOpType.UPSERT) {
+            const res = await this.applyUpsertTransaction(
+              userId,
+              deviceId,
+              op.payload
+            );
+            if (res === "applied") {
+              applied.push(op.entityId);
+              appliedOpIds.push(op.opId);
+            } else {
+              ignored.push(op.entityId);
+              ignoredOpIds.push(op.opId);
+            }
+            continue;
+          }
+
+          throw new BadRequestException(`Unsupported op: ${op.op}`);
         }
 
-        if (op.op === SyncOpType.UPSERT) {
-          const res = await this.applyUpsertTransaction(
-            userId,
-            deviceId,
-            op.payload
-          );
-          (res === "applied" ? applied : ignored).push(op.entityId);
-          continue;
+        if (op.entity === SyncEntity.CONTACT) {
+          if (op.op === SyncOpType.DELETE) {
+            const ts = this.parseClientTs(op.payload);
+            const res = await this.applyDeleteContact(
+              userId,
+              deviceId,
+              op.entityId,
+              ts
+            );
+            if (res === "applied") {
+              applied.push(op.entityId);
+              appliedOpIds.push(op.opId);
+            } else {
+              ignored.push(op.entityId);
+              ignoredOpIds.push(op.opId);
+            }
+            continue;
+          }
+
+          if (op.op === SyncOpType.UPSERT) {
+            const res = await this.applyUpsertContact(
+              userId,
+              deviceId,
+              op.payload
+            );
+            if (res === "applied") {
+              applied.push(op.entityId);
+              appliedOpIds.push(op.opId);
+            } else {
+              ignored.push(op.entityId);
+              ignoredOpIds.push(op.opId);
+            }
+            continue;
+          }
+
+          throw new BadRequestException(`Unsupported op: ${op.op}`);
         }
 
-        throw new BadRequestException(`Unsupported op: ${op.op}`);
+        if (op.entity === SyncEntity.CATEGORY) {
+          if (op.op === SyncOpType.DELETE) {
+            const ts = this.parseClientTs(op.payload);
+            const res = await this.applyDeleteCategory(
+              userId,
+              deviceId,
+              op.entityId,
+              ts
+            );
+            if (res === "applied") {
+              applied.push(op.entityId);
+              appliedOpIds.push(op.opId);
+            } else {
+              ignored.push(op.entityId);
+              ignoredOpIds.push(op.opId);
+            }
+            continue;
+          }
+
+          if (op.op === SyncOpType.UPSERT) {
+            const res = await this.applyUpsertCategory(
+              userId,
+              deviceId,
+              op.payload
+            );
+            if (res === "applied") {
+              applied.push(op.entityId);
+              appliedOpIds.push(op.opId);
+            } else {
+              ignored.push(op.entityId);
+              ignoredOpIds.push(op.opId);
+            }
+            continue;
+          }
+
+          throw new BadRequestException(`Unsupported op: ${op.op}`);
+        }
+
+        throw new BadRequestException(`Unsupported entity: ${op.entity}`);
       } catch (e: any) {
         failed.push({
           entityId: op.entityId,
@@ -80,19 +173,25 @@ export class SyncService {
       }
     }
 
-    return { applied, ignored, failed, serverTime: new Date().toISOString() };
+    return {
+      applied,
+      ignored,
+      failed,
+      appliedOpIds,
+      ignoredOpIds,
+      serverTime: new Date().toISOString(),
+    };
   }
 
   /**
    * Pull server changes since timestamp
-   * - returns both updated rows AND tombstones (deleted rows)
+   * - returns updated + tombstones
+   * - keeps TRANSACTION response intact, and adds contacts/categories
    */
   async pull(userId: string, sinceIso?: string, limit = 500) {
     const since = sinceIso ? new Date(sinceIso) : new Date(0);
     if (Number.isNaN(since.getTime())) {
-      throw new BadRequestException(
-        "since must be a valid ISO 8601 date string"
-      );
+      throw new BadRequestException("since must be a valid ISO 8601 date string");
     }
 
     const safeLimit = Math.min(Math.max(limit || 500, 1), 2000);
@@ -107,17 +206,44 @@ export class SyncService {
       include: { splits: true },
     });
 
+    const contacts = await this.prisma.contact.findMany({
+      where: {
+        userId,
+        OR: [{ updatedAt: { gt: since } }, { deletedAt: { gt: since } }],
+      },
+      orderBy: { updatedAt: "desc" },
+      take: safeLimit,
+    });
+
+    // user categories only (defaults handled separately)
+    const categories = await this.prisma.category.findMany({
+      where: {
+        userId,
+        isDefault: false,
+        OR: [{ updatedAt: { gt: since } }, { deletedAt: { gt: since } }],
+      },
+      orderBy: { updatedAt: "desc" },
+      take: safeLimit,
+    });
+
+    // defaults always (not synced via push)
+    const defaultCategories = await this.prisma.category.findMany({
+      where: { isDefault: true, userId: null, deletedAt: null },
+      orderBy: { name: "asc" },
+    });
+
     return {
       serverTime: new Date().toISOString(),
       transactions,
+      contacts,
+      categories,
+      defaultCategories,
     };
   }
 
-  /**
-   * UPSERT (create or update)
-   * - uses client timestamp (payload.clientUpdatedAt) else payload.updatedAt
-   * - blocks resurrect of deleted rows unless incoming is newer
-   */
+  // -------------------------
+  // TRANSACTION UPSERT (UNCHANGED)
+  // -------------------------
   private async applyUpsertTransaction(
     userId: string,
     deviceId: string,
@@ -137,23 +263,15 @@ export class SyncService {
     const existingTs =
       existing?.clientUpdatedAt ?? existing?.updatedAt ?? new Date(0);
 
-    // Ignore old/equal writes (idempotent)
     if (existing && incomingClientUpdatedAt <= existingTs) {
       return "ignored";
     }
 
-    // If server already tombstoned it, prevent resurrection from older client ops
-    // Allow "restore" only if incoming is newer than the tombstone timestamp
     const isDeletedOnServer = !!existing?.deletedAt;
-    if (
-      existing &&
-      isDeletedOnServer &&
-      incomingClientUpdatedAt <= existingTs
-    ) {
+    if (existing && isDeletedOnServer && incomingClientUpdatedAt <= existingTs) {
       return "ignored";
     }
 
-    // Cloudinary cleanup if receipt changed (idempotent safe)
     if (
       existing?.receiptPublicId &&
       (payload.receiptPublicId === null ||
@@ -179,32 +297,21 @@ export class SyncService {
       receiptImage: payload.receiptImage ?? null,
       receiptPublicId: payload.receiptPublicId ?? null,
 
-      // LWW timestamp from client
       clientUpdatedAt: incomingClientUpdatedAt,
 
-      // ✅ If incoming is newer, allow "restore" (optional but recommended)
-      // ✅ PRESERVE TOMBSTONE
+      // preserve tombstone unless restore logic is needed
       deletedAt: existing?.deletedAt ?? null,
       deletedByDeviceId: existing?.deletedByDeviceId ?? null,
     };
 
-    // Validate required date fields
     if (Number.isNaN(baseData.date.getTime())) {
-      throw new BadRequestException(
-        "payload.date must be a valid ISO 8601 date string"
-      );
+      throw new BadRequestException("payload.date must be a valid ISO 8601 date string");
     }
     if (baseData.dueDate && Number.isNaN(baseData.dueDate.getTime())) {
-      throw new BadRequestException(
-        "payload.dueDate must be a valid ISO 8601 date string"
-      );
+      throw new BadRequestException("payload.dueDate must be a valid ISO 8601 date string");
     }
 
-    // Build safe splits
-    const safeSplits = await this.filterSplitsByExistingContacts(
-      userId,
-      payload.splits
-    );
+    const safeSplits = await this.filterSplitsByExistingContacts(userId, payload.splits);
 
     const splitsCreate =
       Array.isArray(safeSplits) && safeSplits.length
@@ -233,18 +340,14 @@ export class SyncService {
       : undefined;
 
     if (!existing) {
-      const createdAt = payload.createdAt
-        ? new Date(payload.createdAt)
-        : new Date();
+      const createdAt = payload.createdAt ? new Date(payload.createdAt) : new Date();
       if (Number.isNaN(createdAt.getTime())) {
-        throw new BadRequestException(
-          "payload.createdAt must be a valid ISO 8601 date string"
-        );
+        throw new BadRequestException("payload.createdAt must be a valid ISO 8601 date string");
       }
 
       await this.prisma.transaction.create({
         data: {
-          id: payload.id, // ✅ critical for idempotency
+          id: payload.id,
           ...baseData,
           createdAt,
           ...(splitsCreate ? { splits: splitsCreate } : {}),
@@ -265,30 +368,22 @@ export class SyncService {
     return "applied";
   }
 
-  /**
-   * DELETE (tombstone)
-   * - conflict safe
-   * - idempotent
-   */
+  // -------------------------
+  // TRANSACTION DELETE (UNCHANGED)
+  // -------------------------
   private async applyDeleteTransaction(
     userId: string,
     deviceId: string,
     id: string,
     clientTs: Date
   ): Promise<"applied" | "ignored"> {
-    const existing = await this.prisma.transaction.findUnique({
-      where: { id },
-    });
-    if (!existing) return "ignored"; // idempotent: nothing to delete
+    const existing = await this.prisma.transaction.findUnique({ where: { id } });
+    if (!existing) return "ignored";
     if (existing.userId !== userId) throw new ForbiddenException();
 
-    const existingTs =
-      existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
-
-    // Older/equal delete should not win
+    const existingTs = existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
     if (clientTs < existingTs) return "ignored";
 
-    // Cloudinary cleanup once (optional)
     if (existing.receiptPublicId) {
       await this.safeDestroyCloudinary(existing.receiptPublicId);
     }
@@ -305,9 +400,199 @@ export class SyncService {
     return "applied";
   }
 
+  // -------------------------
+  // CONTACT UPSERT
+  // -------------------------
+  private async applyUpsertContact(
+    userId: string,
+    deviceId: string,
+    payload: any
+  ): Promise<"applied" | "ignored"> {
+    const incomingTs = this.parseClientTs(payload);
+
+    const existing = await this.prisma.contact.findUnique({
+      where: { id: payload.id },
+    });
+
+    if (existing && existing.userId !== userId) {
+      throw new ForbiddenException();
+    }
+
+    const existingTs =
+      existing?.clientUpdatedAt ?? existing?.updatedAt ?? new Date(0);
+
+    if (existing && incomingTs <= existingTs) {
+      return "ignored";
+    }
+
+    const baseData: any = {
+      userId,
+      name: payload.name,
+      clientUpdatedAt: incomingTs,
+
+      // preserve tombstone by default (no resurrection unless you want it)
+      deletedAt: existing?.deletedAt ?? null,
+      deletedByDeviceId: existing?.deletedByDeviceId ?? null,
+    };
+
+    if (!existing) {
+      const createdAt = payload.createdAt ? new Date(payload.createdAt) : new Date();
+      if (Number.isNaN(createdAt.getTime())) {
+        throw new BadRequestException("payload.createdAt must be a valid ISO 8601 date string");
+      }
+
+      await this.prisma.contact.create({
+        data: {
+          id: payload.id,
+          ...baseData,
+          createdAt,
+        },
+      });
+      return "applied";
+    }
+
+    await this.prisma.contact.update({
+      where: { id: payload.id },
+      data: baseData,
+    });
+
+    return "applied";
+  }
+
+  // -------------------------
+  // CONTACT DELETE (tombstone)
+  // -------------------------
+  private async applyDeleteContact(
+    userId: string,
+    deviceId: string,
+    id: string,
+    clientTs: Date
+  ): Promise<"applied" | "ignored"> {
+    const existing = await this.prisma.contact.findUnique({ where: { id } });
+    if (!existing) return "ignored";
+    if (existing.userId !== userId) throw new ForbiddenException();
+
+    const existingTs = existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
+    if (clientTs < existingTs) return "ignored";
+
+    await this.prisma.contact.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        deletedByDeviceId: deviceId,
+        clientUpdatedAt: clientTs,
+      },
+    });
+
+    return "applied";
+  }
+
+  // -------------------------
+  // CATEGORY UPSERT (user categories only)
+  // -------------------------
+  private async applyUpsertCategory(
+    userId: string,
+    deviceId: string,
+    payload: any
+  ): Promise<"applied" | "ignored"> {
+    const incomingTs = this.parseClientTs(payload);
+
+    const existing = await this.prisma.category.findUnique({
+      where: { id: payload.id },
+    });
+
+    // If it exists and belongs to someone else, forbid
+    if (existing && existing.userId && existing.userId !== userId) {
+      throw new ForbiddenException();
+    }
+
+    // Do not allow sync to modify defaults
+    if (existing?.isDefault || payload?.isDefault === true) {
+      // treat as ignored (safe)
+      return "ignored";
+    }
+
+    const existingTs =
+      existing?.clientUpdatedAt ?? existing?.updatedAt ?? new Date(0);
+
+    if (existing && incomingTs <= existingTs) {
+      return "ignored";
+    }
+
+    const baseData: any = {
+      // user-owned category
+      userId,
+      isDefault: false,
+
+      name: payload.name,
+      iconName: payload.iconName,
+      color: payload.color,
+
+      clientUpdatedAt: incomingTs,
+
+      deletedAt: existing?.deletedAt ?? null,
+      deletedByDeviceId: existing?.deletedByDeviceId ?? null,
+    };
+
+    if (!existing) {
+      const createdAt = payload.createdAt ? new Date(payload.createdAt) : new Date();
+      if (Number.isNaN(createdAt.getTime())) {
+        throw new BadRequestException("payload.createdAt must be a valid ISO 8601 date string");
+      }
+
+      await this.prisma.category.create({
+        data: {
+          id: payload.id,
+          ...baseData,
+          createdAt,
+        },
+      });
+      return "applied";
+    }
+
+    await this.prisma.category.update({
+      where: { id: payload.id },
+      data: baseData,
+    });
+
+    return "applied";
+  }
+
+  // -------------------------
+  // CATEGORY DELETE (tombstone)
+  // -------------------------
+  private async applyDeleteCategory(
+    userId: string,
+    deviceId: string,
+    id: string,
+    clientTs: Date
+  ): Promise<"applied" | "ignored"> {
+    const existing = await this.prisma.category.findUnique({ where: { id } });
+    if (!existing) return "ignored";
+
+    // don't delete defaults via sync
+    if (existing.isDefault) return "ignored";
+
+    if (existing.userId !== userId) throw new ForbiddenException();
+
+    const existingTs = existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
+    if (clientTs < existingTs) return "ignored";
+
+    await this.prisma.category.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        deletedByDeviceId: deviceId,
+        clientUpdatedAt: clientTs,
+      },
+    });
+
+    return "applied";
+  }
+
   /**
    * Parse client timestamp from payload
-   * Accepts payload.clientUpdatedAt first, else payload.updatedAt
+   * Accepts payload.clientUpdatedAt first, else payload.updatedAt, else now
    */
   private parseClientTs(payload: any): Date {
     const raw = payload?.clientUpdatedAt ?? payload?.updatedAt;
@@ -337,7 +622,7 @@ export class SyncService {
     if (!ids.length) return [];
 
     const contacts = await this.prisma.contact.findMany({
-      where: { userId, id: { in: ids } },
+      where: { userId, id: { in: ids }, deletedAt: null },
       select: { id: true },
     });
 
@@ -352,23 +637,56 @@ export class SyncService {
       // ignore for idempotency
     }
   }
+
+  /**
+   * Validate payload based on entity + op
+   * (keeps your transaction validation intact)
+   */
   private validatePayload(op: SyncOpDto) {
     if (op.op === SyncOpType.DELETE) {
-      if (!op.payload?.id)
+      if (!op.payload?.id) {
         throw new BadRequestException("DELETE payload.id required");
-      // updatedAt or clientUpdatedAt recommended
+      }
+      // timestamp optional but recommended
       return;
     }
 
     if (op.op === SyncOpType.UPSERT) {
       const p = op.payload;
-      const required = ["id", "title", "amount", "type", "category", "date"];
-      for (const k of required) {
-        if (p?.[k] === undefined || p?.[k] === null || p?.[k] === "") {
-          throw new BadRequestException(`UPSERT payload.${k} required`);
+
+      if (op.entity === SyncEntity.TRANSACTION) {
+        const required = ["id", "title", "amount", "type", "category", "date"];
+        for (const k of required) {
+          if (p?.[k] === undefined || p?.[k] === null || p?.[k] === "") {
+            throw new BadRequestException(`UPSERT payload.${k} required`);
+          }
         }
+        return;
       }
-      return;
+
+      if (op.entity === SyncEntity.CONTACT) {
+        const required = ["id", "name"];
+        for (const k of required) {
+          if (p?.[k] === undefined || p?.[k] === null || p?.[k] === "") {
+            throw new BadRequestException(`UPSERT payload.${k} required`);
+          }
+        }
+        return;
+      }
+
+      if (op.entity === SyncEntity.CATEGORY) {
+        const required = ["id", "name", "iconName", "color"];
+        for (const k of required) {
+          if (p?.[k] === undefined || p?.[k] === null || p?.[k] === "") {
+            throw new BadRequestException(`UPSERT payload.${k} required`);
+          }
+        }
+        return;
+      }
+
+      throw new BadRequestException(`Unsupported entity: ${op.entity}`);
     }
+
+    throw new BadRequestException(`Unsupported op: ${op.op}`);
   }
 }
