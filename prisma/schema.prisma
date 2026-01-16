@@ -132,3 +132,30 @@ model Category {
     @@id([email, type])
   }
 
+model OtpThrottle {
+  email String
+  type  String // "PASSWORD_RESET" | "EMAIL_VERIFY"
+
+  // verify attempts
+  failedVerifyCount Int      @default(0)
+  verifyLockedUntil DateTime?
+
+  // send attempts (rate limiting)
+  sendCount         Int      @default(0)
+  sendWindowStart   DateTime?
+  sendLockedUntil   DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@id([email, type])
+}
+
+model LoginThrottle {
+  email           String   @id // normalized email
+
+  failedCount     Int      @default(0)
+  windowStart     DateTime?
+  lockedUntil     DateTime?
+
+  updatedAt       DateTime @updatedAt
+}
