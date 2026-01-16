@@ -219,4 +219,9 @@ export class UsersService {
       where: { email_type: { email, type } },
     });
   }
+
+  findById(id: string) {
+  return this.prisma.user.findUnique({ where: { id } });
+}
+
 }

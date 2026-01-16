@@ -14,7 +14,7 @@ import { MailModule } from 'src/mail/mail.module';
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'lumina_secret_key_2025', // Use env in real prod
-      signOptions: { expiresIn: '7d' },
+      signOptions: { expiresIn: '15m' },
     }),
     MailModule
   ],

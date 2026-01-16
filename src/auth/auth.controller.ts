@@ -24,9 +24,14 @@ export class AuthController {
   }
 
   @Post("login")
-  async login(@Body() dto: LoginDto) {
-    return this.authService.login(dto.email, dto.password);
-  }
+async login(@Body() dto: LoginDto, @Request() req: any) {
+  const deviceId = req.headers["x-device-id"];
+  const ua = req.headers["user-agent"];
+  const ip = req.ip;
+
+  return this.authService.login(dto.email, dto.password, { deviceId, userAgent: ua, ip });
+}
+
 
   @Post("forgot-password")
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
@@ -60,4 +65,19 @@ export class AuthController {
   async issueResetToken(@Body() body: { email: string }) {
     return this.authService.issueResetToken(body.email);
   }
+
+  @Post("refresh")
+async refresh(@Body() body: { refreshToken: string }, @Request() req: any) {
+  const deviceId = req.headers["x-device-id"];
+  const ua = req.headers["user-agent"];
+  const ip = req.ip;
+
+  return this.authService.refresh(body.refreshToken, { deviceId, userAgent: ua, ip });
+}
+
+@Post("logout")
+async logout(@Body() body: { refreshToken: string }) {
+  return this.authService.logout(body.refreshToken);
+}
+
 }

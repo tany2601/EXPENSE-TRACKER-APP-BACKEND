@@ -17,7 +17,8 @@ const MAX_VERIFY_ATTEMPTS = 3;
 const MAX_SEND_ATTEMPTS = 3;
 const LOGIN_LOCK_MS = 30 * 60 * 1000; // 30 min
 const MAX_LOGIN_ATTEMPTS = 3;
-
+const ACCESS_TTL = "15m";
+const REFRESH_TTL_DAYS = 30;
 
 function normEmail(email: string) {
   return (email || "").trim().toLowerCase();
@@ -58,103 +59,149 @@ export class AuthService {
       passwordHash: hash,
     });
 
-    return this.issueToken(user.id, user.email);
+    const tokens = await this.issueTokens(user.id, user.email);
+    return { ...tokens, user: await this.users.getPublicProfile(user.id) };
   }
 
-  async login(emailRaw: string, password: string) {
-  const email = normEmail(emailRaw);
-  if (!email || !password) {
-    throw new UnauthorizedException("Invalid credentials");
-  }
+  async login(
+    emailRaw: string,
+    password: string,
+    meta?: { deviceId?: string; userAgent?: string; ip?: string }
+  ) {
+    const email = normEmail(emailRaw);
+    if (!email || !password) {
+      throw new UnauthorizedException("Invalid credentials");
+    }
 
-  // 1) Ensure throttle row exists
-  const throttle = await this.prisma.loginThrottle.upsert({
-    where: { email },
-    create: { email },
-    update: {},
-  });
+    // 1) Ensure throttle row exists
+    const throttle = await this.prisma.loginThrottle.upsert({
+      where: { email },
+      create: { email },
+      update: {},
+    });
 
-  // 2) If locked -> block
-  if (throttle.lockedUntil && throttle.lockedUntil > now()) {
-    throw new HttpException(
-      {
-        message: "Too many wrong attempts. Try again later.",
-        code: "LOGIN_LOCKED",
-        lockedUntil: throttle.lockedUntil,
-      },
-      HttpStatus.TOO_MANY_REQUESTS
-    );
-  }
-
-  // 3) Rolling 30-min window (optional, but recommended)
-  const inWindow =
-    throttle.windowStart &&
-    throttle.windowStart.getTime() > Date.now() - LOGIN_LOCK_MS;
-
-  const windowStart = inWindow ? throttle.windowStart : now();
-  const failedCount = inWindow ? throttle.failedCount : 0;
-
-  // 4) Validate credentials
-  const user = await this.users.findByEmail(email);
-  const ok = user ? await bcrypt.compare(password, user.passwordHash) : false;
-
-  // 5) Wrong credentials -> increment + maybe lock
-  if (!user || !ok) {
-    const nextFailed = failedCount + 1;
-
-    // lock at 3rd attempt
-    if (nextFailed >= MAX_LOGIN_ATTEMPTS) {
-      const lockedUntil = addMs(LOGIN_LOCK_MS);
-
-      await this.prisma.loginThrottle.update({
-        where: { email },
-        data: {
-          failedCount: 0,
-          windowStart: null,
-          lockedUntil,
-        },
-      });
-
+    // 2) If locked -> block
+    if (throttle.lockedUntil && throttle.lockedUntil > now()) {
       throw new HttpException(
         {
-          message: "Too many wrong attempts. Try again in 30 minutes.",
+          message: "Too many wrong attempts. Try again later.",
           code: "LOGIN_LOCKED",
-          lockedUntil,
+          lockedUntil: throttle.lockedUntil,
         },
         HttpStatus.TOO_MANY_REQUESTS
       );
     }
 
+    // 3) Rolling 30-min window (optional, but recommended)
+    const inWindow =
+      throttle.windowStart &&
+      throttle.windowStart.getTime() > Date.now() - LOGIN_LOCK_MS;
+
+    const windowStart = inWindow ? throttle.windowStart : now();
+    const failedCount = inWindow ? throttle.failedCount : 0;
+
+    // 4) Validate credentials
+    const user = await this.users.findByEmail(email);
+    const ok = user ? await bcrypt.compare(password, user.passwordHash) : false;
+
+    // 5) Wrong credentials -> increment + maybe lock
+    if (!user || !ok) {
+      const nextFailed = failedCount + 1;
+
+      // lock at 3rd attempt
+      if (nextFailed >= MAX_LOGIN_ATTEMPTS) {
+        const lockedUntil = addMs(LOGIN_LOCK_MS);
+
+        await this.prisma.loginThrottle.update({
+          where: { email },
+          data: {
+            failedCount: 0,
+            windowStart: null,
+            lockedUntil,
+          },
+        });
+
+        throw new HttpException(
+          {
+            message: "Too many wrong attempts. Try again in 30 minutes.",
+            code: "LOGIN_LOCKED",
+            lockedUntil,
+          },
+          HttpStatus.TOO_MANY_REQUESTS
+        );
+      }
+
+      await this.prisma.loginThrottle.update({
+        where: { email },
+        data: {
+          failedCount: nextFailed,
+          windowStart,
+          lockedUntil: null,
+        },
+      });
+
+      throw new UnauthorizedException({
+        message: "Invalid credentials",
+        code: "LOGIN_INVALID",
+        attemptsLeft: MAX_LOGIN_ATTEMPTS - nextFailed,
+      });
+    }
+
+    // 6) Success -> clear throttle
     await this.prisma.loginThrottle.update({
       where: { email },
+      data: { failedCount: 0, windowStart: null, lockedUntil: null },
+    });
+
+    const tokens = await this.issueTokens(user.id, user.email, meta);
+    return { ...tokens, user: await this.users.getPublicProfile(user.id) };
+  }
+
+  private async issueTokens(
+    userId: string,
+    email: string,
+    meta?: { deviceId?: string; userAgent?: string; ip?: string }
+  ) {
+    const accessToken = await this.jwt.signAsync(
+      { sub: userId, email, typ: "access" },
+      { expiresIn: ACCESS_TTL }
+    );
+
+    const refreshToken = await this.jwt.signAsync(
+      { sub: userId, email, typ: "refresh" },
+      { expiresIn: `${REFRESH_TTL_DAYS}d` }
+    );
+
+    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+
+    const expiresAt = new Date(
+      Date.now() + REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000
+    );
+
+    // optional: enforce 1 session per device (recommended)
+    if (meta?.deviceId) {
+      await this.prisma.session.updateMany({
+        where: { userId, deviceId: meta.deviceId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+
+    const session = await this.prisma.session.create({
       data: {
-        failedCount: nextFailed,
-        windowStart,
-        lockedUntil: null,
+        userId,
+        refreshTokenHash,
+        expiresAt,
+        deviceId: meta?.deviceId ?? null,
+        userAgent: meta?.userAgent ?? null,
+        ip: meta?.ip ?? null,
       },
     });
 
-    throw new UnauthorizedException({
-      message: "Invalid credentials",
-      code: "LOGIN_INVALID",
-      attemptsLeft: MAX_LOGIN_ATTEMPTS - nextFailed,
-    });
-  }
-
-  // 6) Success -> clear throttle
-  await this.prisma.loginThrottle.update({
-    where: { email },
-    data: { failedCount: 0, windowStart: null, lockedUntil: null },
-  });
-
-  return this.issueToken(user.id, user.email);
-}
-
-
-  private async issueToken(userId: string, email: string) {
-    const token = await this.jwt.signAsync({ sub: userId, email });
-    const user = await this.users.getPublicProfile(userId);
-    return { access_token: token, user };
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      sessionId: session.id,
+    };
   }
 
   private generateOtp(): string {
@@ -372,6 +419,96 @@ export class AuthService {
       payload.email.toLowerCase(),
       passwordHash
     );
+
+    return { ok: true };
+  }
+
+  async refresh(
+    refreshToken: string,
+    meta?: { deviceId?: string; userAgent?: string; ip?: string }
+  ) {
+    let payload: any;
+    try {
+      payload = await this.jwt.verifyAsync(refreshToken);
+    } catch {
+      throw new UnauthorizedException("Invalid refresh token");
+    }
+
+    if (payload.typ !== "refresh" || !payload.sub) {
+      throw new UnauthorizedException("Invalid refresh token");
+    }
+
+    const userId = payload.sub as string;
+
+    // find a matching session by comparing hash
+    const sessions = await this.prisma.session.findMany({
+      where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+    });
+
+    let matchedSession: { id: string; refreshTokenHash: string } | null = null;
+    for (const s of sessions) {
+      const ok = await bcrypt.compare(refreshToken, s.refreshTokenHash);
+      if (ok) {
+        matchedSession = s;
+        break;
+      }
+    }
+
+    // if no session matched: possible reuse/steal -> revoke all sessions for safety
+    if (!matchedSession) {
+      await this.prisma.session.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException(
+        "Refresh token reuse detected. Please login again."
+      );
+    }
+
+    // ROTATE: revoke old session and create new session with new refresh token
+    await this.prisma.session.update({
+      where: { id: matchedSession.id },
+      data: { revokedAt: new Date() },
+    });
+
+    const user = await this.users.findById(userId);
+    if (!user) throw new UnauthorizedException("User not found");
+
+    const { access_token, refresh_token } = await this.issueTokens(
+      user.id,
+      user.email,
+      meta
+    );
+
+    return { access_token, refresh_token };
+  }
+
+  async logout(refreshToken: string) {
+    // verify payload
+    let payload: any;
+    try {
+      payload = await this.jwt.verifyAsync(refreshToken);
+    } catch {
+      return { ok: true }; // don't leak info
+    }
+
+    if (payload.typ !== "refresh" || !payload.sub) return { ok: true };
+    const userId = payload.sub as string;
+
+    // revoke matching session
+    const sessions = await this.prisma.session.findMany({
+      where: { userId, revokedAt: null },
+    });
+
+    for (const s of sessions) {
+      if (await bcrypt.compare(refreshToken, s.refreshTokenHash)) {
+        await this.prisma.session.update({
+          where: { id: s.id },
+          data: { revokedAt: new Date() },
+        });
+        break;
+      }
+    }
 
     return { ok: true };
   }

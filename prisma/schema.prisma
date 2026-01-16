@@ -26,6 +26,7 @@
     transactions Transaction[]
     contacts     Contact[]
     categories Category[]
+    sessions Session[]
   }
 
   model Transaction {
@@ -158,4 +159,26 @@ model LoginThrottle {
   lockedUntil     DateTime?
 
   updatedAt       DateTime @updatedAt
+}
+
+model Session {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // hashed refresh token (never store raw)
+  refreshTokenHash String
+
+  // optional but strongly recommended
+  deviceId        String?
+  userAgent       String?
+  ip              String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  expiresAt       DateTime
+  revokedAt       DateTime?
+
+  @@index([userId])
+  @@index([deviceId])
 }
