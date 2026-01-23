@@ -18,7 +18,7 @@ const MAX_SEND_ATTEMPTS = 3;
 const LOGIN_LOCK_MS = 30 * 60 * 1000; // 30 min
 const MAX_LOGIN_ATTEMPTS = 3;
 const ACCESS_TTL = "15m";
-const REFRESH_TTL_DAYS = 30;
+const REFRESH_TTL_DAYS = 3650;
 
 function normEmail(email: string) {
   return (email || "").trim().toLowerCase();
@@ -167,41 +167,52 @@ export class AuthService {
       { expiresIn: ACCESS_TTL }
     );
 
-    const refreshToken = await this.jwt.signAsync(
-      { sub: userId, email, typ: "refresh" },
-      { expiresIn: `${REFRESH_TTL_DAYS}d` }
-    );
-
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-
     const expiresAt = new Date(
       Date.now() + REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000
     );
 
-    // optional: enforce 1 session per device (recommended)
-    if (meta?.deviceId) {
-      await this.prisma.session.updateMany({
-        where: { userId, deviceId: meta.deviceId, revokedAt: null },
-        data: { revokedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      // optional: enforce 1 session per device
+      if (meta?.deviceId) {
+        await tx.session.updateMany({
+          where: { userId, deviceId: meta.deviceId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
+
+      // 1) create session first
+      const session = await tx.session.create({
+        data: {
+          userId,
+          refreshTokenHash: "PENDING",
+          expiresAt,
+          deviceId: meta?.deviceId ?? null,
+          userAgent: meta?.userAgent ?? null,
+          ip: meta?.ip ?? null,
+        },
+        select: { id: true },
       });
-    }
 
-    const session = await this.prisma.session.create({
-      data: {
-        userId,
-        refreshTokenHash,
-        expiresAt,
-        deviceId: meta?.deviceId ?? null,
-        userAgent: meta?.userAgent ?? null,
-        ip: meta?.ip ?? null,
-      },
+      // 2) sign refresh token with sid=session.id
+      const refreshToken = await this.jwt.signAsync(
+        { sub: userId, email, typ: "refresh", sid: session.id },
+        { expiresIn: `${REFRESH_TTL_DAYS}d` }
+      );
+
+      // 3) hash token and store
+      const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+
+      await tx.session.update({
+        where: { id: session.id },
+        data: { refreshTokenHash },
+      });
+
+      return {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        sessionId: session.id,
+      };
     });
-
-    return {
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      sessionId: session.id,
-    };
   }
 
   private generateOtp(): string {
@@ -428,46 +439,61 @@ export class AuthService {
     meta?: { deviceId?: string; userAgent?: string; ip?: string }
   ) {
     let payload: any;
+
     try {
       payload = await this.jwt.verifyAsync(refreshToken);
     } catch {
       throw new UnauthorizedException("Invalid refresh token");
     }
 
+    // Must be a refresh token
     if (payload.typ !== "refresh" || !payload.sub) {
       throw new UnauthorizedException("Invalid refresh token");
     }
 
     const userId = payload.sub as string;
 
-    // find a matching session by comparing hash
-    const sessions = await this.prisma.session.findMany({
-      where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
-    });
-
-    let matchedSession: { id: string; refreshTokenHash: string } | null = null;
-    for (const s of sessions) {
-      const ok = await bcrypt.compare(refreshToken, s.refreshTokenHash);
-      if (ok) {
-        matchedSession = s;
-        break;
-      }
+    // ✅ sid is required for O(1) lookup (no scanning all sessions)
+    const sid = payload.sid as string | undefined;
+    if (!sid) {
+      throw new UnauthorizedException("Invalid refresh token");
     }
 
-    // if no session matched: possible reuse/steal -> revoke all sessions for safety
-    if (!matchedSession) {
+    // ✅ fetch the one session referenced by sid
+    const session = await this.prisma.session.findFirst({
+      where: {
+        id: sid,
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: { id: true, refreshTokenHash: true },
+    });
+
+    // If session missing/expired/revoked
+    if (!session) {
+      throw new UnauthorizedException("Invalid refresh token");
+    }
+
+    // ✅ compare provided refresh token vs stored hash
+    const ok = await bcrypt.compare(refreshToken, session.refreshTokenHash);
+
+    // Token doesn't match the session -> possible theft/reuse
+    if (!ok) {
+      // revoke all active sessions for this user
       await this.prisma.session.updateMany({
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+
       throw new UnauthorizedException(
         "Refresh token reuse detected. Please login again."
       );
     }
 
-    // ROTATE: revoke old session and create new session with new refresh token
+    // ✅ ROTATE: revoke current session, mint a new refresh token + session
     await this.prisma.session.update({
-      where: { id: matchedSession.id },
+      where: { id: session.id },
       data: { revokedAt: new Date() },
     });
 
@@ -484,31 +510,39 @@ export class AuthService {
   }
 
   async logout(refreshToken: string) {
-    // verify payload
     let payload: any;
     try {
       payload = await this.jwt.verifyAsync(refreshToken);
     } catch {
-      return { ok: true }; // don't leak info
+      return { ok: true };
     }
 
-    if (payload.typ !== "refresh" || !payload.sub) return { ok: true };
-    const userId = payload.sub as string;
+    if (payload.typ !== "refresh" || !payload.sub || !payload.sid)
+      return { ok: true };
 
-    // revoke matching session
-    const sessions = await this.prisma.session.findMany({
-      where: { userId, revokedAt: null },
+    await this.prisma.session.updateMany({
+      where: {
+        id: payload.sid,
+        userId: payload.sub,
+        revokedAt: null,
+      },
+      data: { revokedAt: new Date() },
     });
 
-    for (const s of sessions) {
-      if (await bcrypt.compare(refreshToken, s.refreshTokenHash)) {
-        await this.prisma.session.update({
-          where: { id: s.id },
-          data: { revokedAt: new Date() },
-        });
-        break;
-      }
-    }
+    return { ok: true };
+  }
+
+  async cleanupSessions() {
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days
+
+    await this.prisma.session.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lt: new Date() } },
+          { revokedAt: { not: null, lt: cutoff } },
+        ],
+      },
+    });
 
     return { ok: true };
   }
