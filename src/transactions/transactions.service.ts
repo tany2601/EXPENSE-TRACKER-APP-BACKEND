@@ -84,13 +84,33 @@ export class TransactionsService {
         amount: dto.amount,
         type: dto.type,
         category: dto.category,
+
         date: dto.date ? new Date(dto.date) : undefined,
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+
+        // ✅ allow clearing dueDate by passing null
+        dueDate:
+          dto.dueDate === undefined
+            ? undefined
+            : dto.dueDate
+              ? new Date(dto.dueDate)
+              : null,
+
         isPaid: dto.isPaid,
         clientName: dto.clientName,
         projectTitle: dto.projectTitle,
         notes: dto.notes,
         tags: dto.tags,
+
+        // ✅ NEW: allow dismiss timestamp update (and allow clearing with null)
+        reminderDismissedAt:
+          dto.reminderDismissedAt === undefined
+            ? undefined
+            : dto.reminderDismissedAt
+              ? new Date(dto.reminderDismissedAt)
+              : null,
+
+        // ✅ If dueDate was changed in this PATCH, re-enable reminders
+        ...(dto.dueDate !== undefined ? { reminderDismissedAt: null } : {}),
 
         // ✅ THESE MUST ACCEPT NULL
         receiptImage: dto.receiptImage,
@@ -106,6 +126,7 @@ export class TransactionsService {
             }
           : undefined,
       },
+
       include: {
         splits: { include: { participant: true } },
       },

@@ -60,6 +60,7 @@
       // Soft delete (tombstone)
   deletedAt         DateTime?
   deletedByDeviceId String?
+  reminderDismissedAt DateTime?
 
   }
 

@@ -29,7 +29,7 @@ export class SyncService {
   async push(
     userId: string,
     deviceId: string,
-    ops: SyncOpDto[]
+    ops: SyncOpDto[],
   ): Promise<PushResult> {
     const applied: string[] = [];
     const ignored: string[] = [];
@@ -57,7 +57,7 @@ export class SyncService {
               userId,
               deviceId,
               op.entityId,
-              deleteTs
+              deleteTs,
             );
             if (res === "applied") {
               applied.push(op.entityId);
@@ -73,7 +73,7 @@ export class SyncService {
             const res = await this.applyUpsertTransaction(
               userId,
               deviceId,
-              op.payload
+              op.payload,
             );
             if (res === "applied") {
               applied.push(op.entityId);
@@ -95,7 +95,7 @@ export class SyncService {
               userId,
               deviceId,
               op.entityId,
-              ts
+              ts,
             );
             if (res === "applied") {
               applied.push(op.entityId);
@@ -111,7 +111,7 @@ export class SyncService {
             const res = await this.applyUpsertContact(
               userId,
               deviceId,
-              op.payload
+              op.payload,
             );
             if (res === "applied") {
               applied.push(op.entityId);
@@ -133,7 +133,7 @@ export class SyncService {
               userId,
               deviceId,
               op.entityId,
-              ts
+              ts,
             );
             if (res === "applied") {
               applied.push(op.entityId);
@@ -149,7 +149,7 @@ export class SyncService {
             const res = await this.applyUpsertCategory(
               userId,
               deviceId,
-              op.payload
+              op.payload,
             );
             if (res === "applied") {
               applied.push(op.entityId);
@@ -191,7 +191,9 @@ export class SyncService {
   async pull(userId: string, sinceIso?: string, limit = 500) {
     const since = sinceIso ? new Date(sinceIso) : new Date(0);
     if (Number.isNaN(since.getTime())) {
-      throw new BadRequestException("since must be a valid ISO 8601 date string");
+      throw new BadRequestException(
+        "since must be a valid ISO 8601 date string",
+      );
     }
 
     const safeLimit = Math.min(Math.max(limit || 500, 1), 2000);
@@ -247,7 +249,7 @@ export class SyncService {
   private async applyUpsertTransaction(
     userId: string,
     deviceId: string,
-    payload: any
+    payload: any,
   ): Promise<"applied" | "ignored"> {
     const incomingClientUpdatedAt = this.parseClientTs(payload);
 
@@ -268,7 +270,11 @@ export class SyncService {
     }
 
     const isDeletedOnServer = !!existing?.deletedAt;
-    if (existing && isDeletedOnServer && incomingClientUpdatedAt <= existingTs) {
+    if (
+      existing &&
+      isDeletedOnServer &&
+      incomingClientUpdatedAt <= existingTs
+    ) {
       return "ignored";
     }
 
@@ -289,6 +295,9 @@ export class SyncService {
       date: new Date(payload.date),
       dueDate: payload.dueDate ? new Date(payload.dueDate) : null,
       isPaid: payload.isPaid ?? true,
+      reminderDismissedAt: payload.reminderDismissedAt
+        ? new Date(payload.reminderDismissedAt)
+        : null,
 
       clientName: payload.clientName ?? null,
       projectTitle: payload.projectTitle ?? null,
@@ -305,13 +314,20 @@ export class SyncService {
     };
 
     if (Number.isNaN(baseData.date.getTime())) {
-      throw new BadRequestException("payload.date must be a valid ISO 8601 date string");
+      throw new BadRequestException(
+        "payload.date must be a valid ISO 8601 date string",
+      );
     }
     if (baseData.dueDate && Number.isNaN(baseData.dueDate.getTime())) {
-      throw new BadRequestException("payload.dueDate must be a valid ISO 8601 date string");
+      throw new BadRequestException(
+        "payload.dueDate must be a valid ISO 8601 date string",
+      );
     }
 
-    const safeSplits = await this.filterSplitsByExistingContacts(userId, payload.splits);
+    const safeSplits = await this.filterSplitsByExistingContacts(
+      userId,
+      payload.splits,
+    );
 
     const splitsCreate =
       Array.isArray(safeSplits) && safeSplits.length
@@ -340,9 +356,13 @@ export class SyncService {
       : undefined;
 
     if (!existing) {
-      const createdAt = payload.createdAt ? new Date(payload.createdAt) : new Date();
+      const createdAt = payload.createdAt
+        ? new Date(payload.createdAt)
+        : new Date();
       if (Number.isNaN(createdAt.getTime())) {
-        throw new BadRequestException("payload.createdAt must be a valid ISO 8601 date string");
+        throw new BadRequestException(
+          "payload.createdAt must be a valid ISO 8601 date string",
+        );
       }
 
       await this.prisma.transaction.create({
@@ -375,13 +395,16 @@ export class SyncService {
     userId: string,
     deviceId: string,
     id: string,
-    clientTs: Date
+    clientTs: Date,
   ): Promise<"applied" | "ignored"> {
-    const existing = await this.prisma.transaction.findUnique({ where: { id } });
+    const existing = await this.prisma.transaction.findUnique({
+      where: { id },
+    });
     if (!existing) return "ignored";
     if (existing.userId !== userId) throw new ForbiddenException();
 
-    const existingTs = existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
+    const existingTs =
+      existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
     if (clientTs < existingTs) return "ignored";
 
     if (existing.receiptPublicId) {
@@ -406,7 +429,7 @@ export class SyncService {
   private async applyUpsertContact(
     userId: string,
     deviceId: string,
-    payload: any
+    payload: any,
   ): Promise<"applied" | "ignored"> {
     const incomingTs = this.parseClientTs(payload);
 
@@ -436,9 +459,13 @@ export class SyncService {
     };
 
     if (!existing) {
-      const createdAt = payload.createdAt ? new Date(payload.createdAt) : new Date();
+      const createdAt = payload.createdAt
+        ? new Date(payload.createdAt)
+        : new Date();
       if (Number.isNaN(createdAt.getTime())) {
-        throw new BadRequestException("payload.createdAt must be a valid ISO 8601 date string");
+        throw new BadRequestException(
+          "payload.createdAt must be a valid ISO 8601 date string",
+        );
       }
 
       await this.prisma.contact.create({
@@ -466,13 +493,14 @@ export class SyncService {
     userId: string,
     deviceId: string,
     id: string,
-    clientTs: Date
+    clientTs: Date,
   ): Promise<"applied" | "ignored"> {
     const existing = await this.prisma.contact.findUnique({ where: { id } });
     if (!existing) return "ignored";
     if (existing.userId !== userId) throw new ForbiddenException();
 
-    const existingTs = existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
+    const existingTs =
+      existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
     if (clientTs < existingTs) return "ignored";
 
     await this.prisma.contact.update({
@@ -493,7 +521,7 @@ export class SyncService {
   private async applyUpsertCategory(
     userId: string,
     deviceId: string,
-    payload: any
+    payload: any,
   ): Promise<"applied" | "ignored"> {
     const incomingTs = this.parseClientTs(payload);
 
@@ -535,9 +563,13 @@ export class SyncService {
     };
 
     if (!existing) {
-      const createdAt = payload.createdAt ? new Date(payload.createdAt) : new Date();
+      const createdAt = payload.createdAt
+        ? new Date(payload.createdAt)
+        : new Date();
       if (Number.isNaN(createdAt.getTime())) {
-        throw new BadRequestException("payload.createdAt must be a valid ISO 8601 date string");
+        throw new BadRequestException(
+          "payload.createdAt must be a valid ISO 8601 date string",
+        );
       }
 
       await this.prisma.category.create({
@@ -565,7 +597,7 @@ export class SyncService {
     userId: string,
     deviceId: string,
     id: string,
-    clientTs: Date
+    clientTs: Date,
   ): Promise<"applied" | "ignored"> {
     const existing = await this.prisma.category.findUnique({ where: { id } });
     if (!existing) return "ignored";
@@ -575,7 +607,8 @@ export class SyncService {
 
     if (existing.userId !== userId) throw new ForbiddenException();
 
-    const existingTs = existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
+    const existingTs =
+      existing.clientUpdatedAt ?? existing.updatedAt ?? new Date(0);
     if (clientTs < existingTs) return "ignored";
 
     await this.prisma.category.update({
@@ -599,7 +632,7 @@ export class SyncService {
     const dt = raw ? new Date(raw) : new Date();
     if (Number.isNaN(dt.getTime())) {
       throw new BadRequestException(
-        "clientUpdatedAt/updatedAt must be a valid ISO 8601 date string"
+        "clientUpdatedAt/updatedAt must be a valid ISO 8601 date string",
       );
     }
     return dt;
@@ -615,8 +648,8 @@ export class SyncService {
       new Set(
         splits
           .map((s: any) => s?.participantId)
-          .filter((x: any) => typeof x === "string" && x.length > 0)
-      )
+          .filter((x: any) => typeof x === "string" && x.length > 0),
+      ),
     );
 
     if (!ids.length) return [];
