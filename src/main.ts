@@ -22,7 +22,7 @@ async function bootstrap() {
     origin: corsOrigins.length
       ? corsOrigins
       : [
-        'https://api.rupexo.paperlighttech.com',
+        "https://rupexo.paperlighttech.com",
         'http://localhost:5173',
         'http://localhost:8080',
         'http://localhost:3000',
@@ -46,6 +46,6 @@ async function bootstrap() {
 
   const port = process.env.PORT || 4000;
   await app.listen(port, "127.0.0.1");
-  console.log(`Lumina Production Backend started on port ${port}`);
+  console.log(`Rupexo Production Backend started on port ${port}`);
 }
 bootstrap();
