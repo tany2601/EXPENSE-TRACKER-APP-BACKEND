@@ -1,0 +1,185 @@
+  generator client {
+    provider = "prisma-client-js"
+  }
+
+  datasource db {
+    provider  = "postgresql"
+    url       = env("DATABASE_URL")
+    directUrl = env("DIRECT_URL")
+  }
+
+  enum TransactionType {
+    INCOME
+    EXPENSE
+  }
+
+  model User {
+    id           String   @id @default(uuid())
+    email        String   @unique
+    name         String
+    phone        String?
+    avatar       String?
+    passwordHash String
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
+
+    transactions Transaction[]
+    contacts     Contact[]
+    categories Category[]
+    sessions Session[]
+  }
+
+  model Transaction {
+    id        String   @id @default(uuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    title     String
+    amount    Float
+    type      TransactionType
+    category  String
+
+    date      DateTime
+    dueDate   DateTime?
+    isPaid    Boolean @default(true)
+
+    clientName    String?
+    projectTitle  String?
+    tags          String[] @default([])
+    notes         String?
+    receiptImage  String?
+    receiptPublicId  String?
+
+    splits    TransactionSplit[]
+
+    // ✅ NEW: client timestamp used for conflict checks
+    clientUpdatedAt DateTime?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+      // Soft delete (tombstone)
+  deletedAt         DateTime?
+  deletedByDeviceId String?
+  reminderDismissedAt DateTime?
+
+  }
+
+
+
+  model TransactionSplit {
+    id             String   @id @default(uuid())
+    transactionId  String
+    transaction    Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+    participantId  String
+    participant    Contact @relation(fields: [participantId], references: [id])
+
+    amount         Float
+    isPaid         Boolean @default(false)
+
+    createdAt      DateTime @default(now())
+  }
+
+model Contact {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+
+  splits    TransactionSplit[]
+
+  // ✅ conflict + sync
+  clientUpdatedAt DateTime?
+  updatedAt       DateTime @updatedAt
+
+  // ✅ tombstone
+  deletedAt         DateTime?
+  deletedByDeviceId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  iconName  String
+  color     String
+  isDefault Boolean  @default(false)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  // ✅ conflict + sync
+  clientUpdatedAt DateTime?
+  updatedAt       DateTime @updatedAt
+
+  // ✅ tombstone
+  deletedAt         DateTime?
+  deletedByDeviceId String?
+
+  @@unique([name, userId])
+}
+
+
+  model EmailOtp {
+    email      String
+    type       String   // "PASSWORD_RESET" | "EMAIL_VERIFY"
+    otpHash    String
+    expiresAt  DateTime
+    createdAt  DateTime @default(now())
+
+    @@id([email, type])
+  }
+
+model OtpThrottle {
+  email String
+  type  String // "PASSWORD_RESET" | "EMAIL_VERIFY"
+
+  // verify attempts
+  failedVerifyCount Int      @default(0)
+  verifyLockedUntil DateTime?
+
+  // send attempts (rate limiting)
+  sendCount         Int      @default(0)
+  sendWindowStart   DateTime?
+  sendLockedUntil   DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@id([email, type])
+}
+
+model LoginThrottle {
+  email           String   @id // normalized email
+
+  failedCount     Int      @default(0)
+  windowStart     DateTime?
+  lockedUntil     DateTime?
+
+  updatedAt       DateTime @updatedAt
+}
+
+model Session {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // hashed refresh token (never store raw)
+  refreshTokenHash String
+
+  // optional but strongly recommended
+  deviceId        String?
+  userAgent       String?
+  ip              String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  expiresAt       DateTime
+  revokedAt       DateTime?
+
+  @@index([userId])
+  @@index([deviceId])
+}

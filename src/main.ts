@@ -16,25 +16,19 @@ async function bootstrap() {
     .filter(Boolean);
 
   app.enableCors({
-    origin: corsOrigins.length ? corsOrigins : [
-      'http://localhost:5173',
-      'http://localhost:3000',
-      'capacitor://localhost',
-      'http://localhost',
-    ],
+    origin: corsOrigins.length
+      ? corsOrigins
+      : [
+        'http://localhost:5173',
+        'http://localhost:8080',
+        'http://localhost:3000',
+        'capacitor://localhost',
+        'https://localhost',          // ✅ ADD THIS
+        'ionic://localhost', 
+        'http://localhost',
+      ],
     credentials: true,
-  });
-
-  // Strict CORS - Only allow the app's frontend
-  app.enableCors({
-    origin: [
-      'http://localhost:5173', 
-      'http://localhost:3000', 
-      'capacitor://localhost', 
-      'http://localhost'
-    ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    credentials: true,
   });
 
   app.setGlobalPrefix('api');
