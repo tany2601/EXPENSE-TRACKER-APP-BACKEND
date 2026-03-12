@@ -43,8 +43,8 @@ async function bootstrap() {
     transform: true,
   }));
 
-  const port = process.env.PORT || 3000;
-  await app.listen(port);
+  const port = process.env.PORT || 4000;
+  await app.listen(port, "127.0.0.1");
   console.log(`Lumina Production Backend started on port ${port}`);
 }
 bootstrap();
