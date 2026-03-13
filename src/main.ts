@@ -18,22 +18,32 @@ async function bootstrap() {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  app.enableCors({
-    origin: corsOrigins.length
-      ? corsOrigins
-      : [
-        "https://rupexo.paperlighttech.com",
-        'http://localhost:5173',
-        'http://localhost:8080',
-        'http://localhost:3000',
-        'capacitor://localhost',
-        'https://localhost',          // ✅ ADD THIS
-        'ionic://localhost', 
-        'http://localhost',
-      ],
-    credentials: true,
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-  });
+ app.enableCors({
+  origin: (origin, callback) => {
+    const allowed = [
+      "https://rupexo.paperlighttech.com",
+      "http://localhost:5173",
+      "http://localhost:8080",
+      "http://localhost:3000",
+      "capacitor://localhost",
+      "ionic://localhost",
+      "http://localhost",
+      "https://localhost"
+    ];
+
+    // allow mobile apps (no origin header)
+    if (!origin) return callback(null, true);
+
+    if (allowed.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(null, true); // allow unknown origins (mobile)
+  },
+
+  credentials: true,
+  methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
+});
 
   app.setGlobalPrefix('api');
 
