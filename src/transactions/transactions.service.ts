@@ -38,6 +38,8 @@ export class TransactionsService {
               })),
             }
           : undefined,
+        updatedAt: new Date(),
+        clientUpdatedAt: new Date(),
       },
       include: {
         splits: { include: { participant: true } },
@@ -125,6 +127,9 @@ export class TransactionsService {
               })),
             }
           : undefined,
+        // 🔥 ADD THIS AT THE END
+        updatedAt: new Date(),
+        clientUpdatedAt: new Date(),
       },
 
       include: {
@@ -151,6 +156,7 @@ export class TransactionsService {
       data: {
         deletedAt: new Date(),
         deletedByDeviceId: "web",
+        updatedAt: new Date(), 
         clientUpdatedAt: new Date(), // or new Date().toISOString() if your schema expects string (usually DateTime)
       },
     });
@@ -171,22 +177,30 @@ export class TransactionsService {
       throw new ForbiddenException();
     }
 
+    // ✅ 1. Update the split
     await this.prisma.transactionSplit.updateMany({
       where: { transactionId, participantId },
       data: { isPaid: true },
     });
 
+    // ✅ 2. Check remaining unpaid splits
     const remaining = await this.prisma.transactionSplit.count({
       where: { transactionId, isPaid: false },
     });
 
-    if (remaining === 0) {
-      await this.prisma.transaction.update({
-        where: { id: transactionId },
-        data: { isPaid: true },
-      });
-    }
+    // ✅ 3. ALWAYS update parent transaction (CRITICAL FOR SYNC)
+    await this.prisma.transaction.update({
+      where: { id: transactionId },
+      data: {
+        isPaid: remaining === 0 ? true : tx.isPaid,
 
+        // 🔥 THESE TWO FIX YOUR SYNC ISSUE
+        updatedAt: new Date(),
+        clientUpdatedAt: new Date(),
+      },
+    });
+
+    // ✅ 4. Return updated transaction
     return this.prisma.transaction.findUnique({
       where: { id: transactionId },
       include: {
@@ -216,6 +230,8 @@ export class TransactionsService {
       data: {
         receiptImage: null,
         receiptPublicId: null,
+        updatedAt: new Date(),
+        clientUpdatedAt: new Date(),
       },
     });
   }
