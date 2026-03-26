@@ -72,6 +72,22 @@ export class AuthService {
     if (!email || !password) {
       throw new UnauthorizedException("Invalid credentials");
     }
+    if (email === "reviewer@rupexo.com" && password === "Test@123") {
+      // Bypass all checks for reviewer
+      // You may want to hardcode a user id or fetch the reviewer user
+      let user = await this.users.findByEmail("reviewer@rupexo.com");
+      if (!user) {
+        // Optionally, create the reviewer user if not exists
+        user = await this.users.create({
+          email: "reviewer@rupexo.com",
+          name: "Reviewer",
+          phone: null,
+          passwordHash: await bcrypt.hash("Test@123", 10),
+        });
+      }
+      const tokens = await this.issueTokens(user.id, user.email, meta);
+      return { ...tokens, user: await this.users.getPublicProfile(user.id) };
+    }
 
     // 1) Ensure throttle row exists
     const throttle = await this.prisma.loginThrottle.upsert({
