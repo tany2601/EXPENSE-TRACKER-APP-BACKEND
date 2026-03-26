@@ -42,7 +42,7 @@ export class AuthService {
     private jwt: JwtService,
     private mail: MailService,
     private prisma: PrismaService
-  ) { }
+  ) {}
 
   async register(data: {
     email: string;
@@ -72,15 +72,6 @@ export class AuthService {
     if (!email || !password) {
       throw new UnauthorizedException("Invalid credentials");
     }
-    // if (email === "reviewer@rupexo.com") {
-    //   const user = await this.users.findByEmail(email);
-
-    //   const isValid = await bcrypt.compare(password, user.passwordHash);
-    //   if (!isValid) throw new Error("Invalid credentials");
-
-    //   const tokens = await this.issueTokens(user.id, user.email, meta);
-    //   return { ...tokens, user: await this.users.getPublicProfile(user.id) };
-    // }
 
     // 1) Ensure throttle row exists
     const throttle = await this.prisma.loginThrottle.upsert({
