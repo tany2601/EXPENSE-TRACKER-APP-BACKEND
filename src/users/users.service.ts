@@ -12,7 +12,7 @@ import { UnauthorizedException } from "@nestjs/common";
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   // -------------------------
   // EXISTING (UNCHANGED)
@@ -200,9 +200,20 @@ export class UsersService {
     return true;
   }
 
-  async resetTransactions(userId: string) {
-    await this.prisma.transaction.deleteMany({
-      where: { userId },
+  async resetTransactions(userId: string, deviceId: string) {
+    const now = new Date();
+
+    await this.prisma.transaction.updateMany({
+      where: {
+        userId,
+        deletedAt: null,
+      },
+      data: {
+        deletedAt: now,
+        deletedByDeviceId: deviceId,
+        updatedAt: now,
+        clientUpdatedAt: now,
+      },
     });
 
     return { success: true };
@@ -221,7 +232,7 @@ export class UsersService {
   }
 
   findById(id: string) {
-  return this.prisma.user.findUnique({ where: { id } });
-}
+    return this.prisma.user.findUnique({ where: { id } });
+  }
 
 }

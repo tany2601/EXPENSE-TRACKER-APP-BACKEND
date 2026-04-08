@@ -19,7 +19,7 @@ import { avatarStorage } from "../cloudinary/avatar.storage";
 @Controller("users")
 @UseGuards(JwtAuthGuard)
 export class UsersController {
-  constructor(private usersService: UsersService) {}
+  constructor(private usersService: UsersService) { }
 
   @Get("me")
   async me(@Request() req: any) {
@@ -57,7 +57,7 @@ export class UsersController {
     return this.usersService.deleteAccount(req.user.id);
   }
 
-  
+
   @Post("verify-password")
   async verifyPassword(
     @Request() req: any,
@@ -68,10 +68,15 @@ export class UsersController {
   }
 
   @UseGuards(JwtAuthGuard)
-@Delete("reset-transactions")
-resetTransactions(@Req() req) {
-  return this.usersService.resetTransactions(req.user.id);
-}
-
+  @Post("reset-transactions")
+  resetTransactions(
+    @Req() req,
+    @Body() body: { deviceId: string }
+  ) {
+    return this.usersService.resetTransactions(
+      req.user.id,
+      body.deviceId
+    );
+  }
 
 }
