@@ -12,8 +12,8 @@ export class MailService {
   ) {
     const subject =
       type === "PASSWORD_RESET"
-        ? "Reset your Lumina password"
-        : "Verify your Lumina email";
+        ? "Reset your Rupexo password"
+        : "Verify your Rupexo email";
 
     const title =
       type === "PASSWORD_RESET"
