@@ -64,7 +64,8 @@ export class NotificationDeliveryService {
     }
 
     // 5. Build deep link data payload
-    const data: Record<string, string> = {};
+    // dedupKey is included so the app can call markOpened when the user taps
+    const data: Record<string, string> = { dedupKey };
     if (opts.deepLinkScreen) data.screen = opts.deepLinkScreen;
     if (opts.deepLinkData) data.extra = opts.deepLinkData;
 

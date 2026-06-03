@@ -242,6 +242,42 @@ async function main() {
       sortOrder: 5,
     },
 
+    // ── BALANCE / LOW SAVINGS alerts (DAILY_ALERTS) ──────────────────────────
+    {
+      name: "Negative balance warning",
+      type: "ALERT",
+      triggerCategory: "DAILY_ALERTS",
+      title: "Spending more than earning 🔴",
+      body: "You've spent ₹{{net_savings_abs}} more than you earned this month. Time to course-correct.",
+      condition: JSON.stringify({ metric: "negative_balance" }),
+      deepLinkScreen: "/statistics",
+      dedupWindowDays: 3,
+      priority: "HIGH",
+      sortOrder: 5,
+    },
+    {
+      name: "Low balance warning",
+      type: "ALERT",
+      triggerCategory: "DAILY_ALERTS",
+      title: "Budget getting tight 🟡",
+      body: "You've used {{expense_to_income_pct}}% of this month's income. Slow down a little?",
+      condition: JSON.stringify({ metric: "low_balance", threshold: 80 }),
+      deepLinkScreen: "/statistics",
+      dedupWindowDays: 3,
+      sortOrder: 6,
+    },
+    {
+      name: "No income logged",
+      type: "INSIGHT",
+      triggerCategory: "WEEKLY_INSIGHTS",
+      title: "Income not tracked 📋",
+      body: "You have expenses this month but no income logged. Add your income to see the full picture.",
+      condition: JSON.stringify({ metric: "high_expenses_no_income" }),
+      deepLinkScreen: "/add",
+      dedupWindowDays: 7,
+      sortOrder: 6,
+    },
+
     // ── MONTHLY_MILESTONES ────────────────────────────────────────────────────
     {
       name: "Savings milestone",

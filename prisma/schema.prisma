@@ -257,3 +257,12 @@ model NotificationPreference {
 
   updatedAt DateTime @updatedAt
 }
+
+// Stores cron schedule expressions — editable from admin dashboard
+model CronSchedule {
+  name       String   @id  // matches the cron job name in scheduler
+  expression String       // cron expression e.g. "0 9 * * *"
+  label      String       // human-readable label
+  isActive   Boolean  @default(true)
+  updatedAt  DateTime @updatedAt
+}

@@ -24,6 +24,9 @@ class BroadcastDto {
   @IsString() @IsNotEmpty() type: string;
   @IsString() @IsNotEmpty() title: string;
   @IsString() @IsNotEmpty() body: string;
+  // Optional store URLs for APP_UPDATE type — sent as deep link data per platform
+  @IsString() androidUrl?: string; // Play Store URL
+  @IsString() iosUrl?: string;     // App Store URL
 }
 
 @UseGuards(JwtAuthGuard, AdminGuard)
@@ -68,31 +71,51 @@ export class AdminNotificationsController {
   }
 
   // ── Broadcast: send to ALL users, bypasses dedup/segments ─────────────────
+  // For APP_UPDATE type: sends platform-specific store URL so Android gets
+  // Play Store link and iOS gets App Store link automatically.
 
   @Post("broadcast")
   async broadcast(@Body() dto: BroadcastDto) {
-    const users = await this.prisma.user.findMany({
-      where: { deviceTokens: { some: {} } },
-      select: { id: true },
+    // Get all device tokens grouped by user, preserving platform info
+    const tokens = await this.prisma.deviceToken.findMany({
+      select: { userId: true, platform: true },
+      distinct: ["userId", "platform"],
     });
 
-    let sent = 0;
-
-    for (const user of users) {
-      const dedupKey = `broadcast_${dto.type}_${user.id}_${Date.now()}`;
-      const ok = await this.delivery.send({
-        userId: user.id,
-        templateId: null,
-        title: dto.title,
-        body: dto.body,
-        dedupKey,
-        deepLinkScreen: null,
-        deepLinkData: null,
-      });
-      if (ok) sent++;
+    // Build a map: userId → platforms[]
+    const userPlatforms = new Map<string, string[]>();
+    for (const t of tokens) {
+      const existing = userPlatforms.get(t.userId) ?? [];
+      if (!existing.includes(t.platform)) existing.push(t.platform);
+      userPlatforms.set(t.userId, existing);
     }
 
-    return { ok: true, sent, total: users.length };
+    let sent = 0;
+    const timestamp = Date.now();
+
+    for (const [userId, platforms] of userPlatforms) {
+      for (const platform of platforms) {
+        // Pick the correct store URL based on platform
+        let storeUrl: string | null = null;
+        if (dto.type === "APP_UPDATE") {
+          storeUrl = platform === "ios" ? (dto.iosUrl ?? null) : (dto.androidUrl ?? null);
+        }
+
+        const dedupKey = `broadcast_${dto.type}_${userId}_${platform}_${timestamp}`;
+        const ok = await this.delivery.send({
+          userId,
+          templateId: null,
+          title: dto.title,
+          body: dto.body,
+          dedupKey,
+          deepLinkScreen: storeUrl ? "external" : null,
+          deepLinkData: storeUrl ? JSON.stringify({ url: storeUrl }) : null,
+        });
+        if (ok) sent++;
+      }
+    }
+
+    return { ok: true, sent, total: userPlatforms.size };
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
@@ -111,14 +134,56 @@ export class AdminNotificationsController {
   }
 
   @Get("recent")
-  getRecentDeliveries(@Query("limit") limit?: string) {
-    return this.prisma.notificationDelivery.findMany({
-      orderBy: { sentAt: "desc" },
-      take: limit ? parseInt(limit, 10) : 50,
-      include: {
-        template: { select: { name: true } },
-        user: { select: { name: true, email: true } },
-      },
-    });
+  async getRecentDeliveries(
+    @Query("limit") limit?: string,
+    @Query("page") page?: string,
+    @Query("status") status?: string,
+    @Query("templateId") templateId?: string,
+    @Query("search") search?: string,
+  ) {
+    const take = Math.min(parseInt(limit ?? "20", 10), 100);
+    const skip = (parseInt(page ?? "1", 10) - 1) * take;
+
+    const where: any = {};
+    if (status && status !== "ALL") where.status = status;
+    if (templateId) where.templateId = templateId;
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { user: { name: { contains: search, mode: "insensitive" } } },
+        { user: { email: { contains: search, mode: "insensitive" } } },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.notificationDelivery.findMany({
+        where,
+        orderBy: { sentAt: "desc" },
+        take,
+        skip,
+        include: {
+          template: { select: { name: true, id: true } },
+          user: { select: { name: true, email: true } },
+        },
+      }),
+      this.prisma.notificationDelivery.count({ where }),
+    ]);
+
+    return { data, total, page: parseInt(page ?? "1", 10), limit: take, totalPages: Math.ceil(total / take) };
+  }
+
+  // ── Cron schedules ─────────────────────────────────────────────────────────
+
+  @Get("schedules")
+  getSchedules() {
+    return this.scheduler.getAllSchedules();
+  }
+
+  @Patch("schedules/:name")
+  updateSchedule(
+    @Param("name") name: string,
+    @Body() body: { expression: string; isActive: boolean }
+  ) {
+    return this.scheduler.updateSchedule(name, body.expression, body.isActive);
   }
 }

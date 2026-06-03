@@ -260,6 +260,16 @@ export class PersonalizationEngine {
         return milestones.some(
           (m) => ctx.totalSavedThisYear >= m && ctx.totalSavedThisYear < m * 2
         );
+      case "negative_balance":
+        // Expenses exceed income this month
+        return ctx.netSavings < 0;
+      case "low_balance":
+        // Spending has consumed more than threshold% of income (default 80%)
+        return ctx.monthlyIncome > 0 &&
+          (ctx.monthlyExpenses / ctx.monthlyIncome) >= ((parsed.threshold ?? 80) / 100);
+      case "high_expenses_no_income":
+        // User has expenses but zero income logged this month
+        return ctx.monthlyIncome === 0 && ctx.monthlyExpenses > 0;
       default:
         return false;
     }
@@ -281,6 +291,10 @@ export class PersonalizationEngine {
       due_tomorrow_title: ctx.dueTomorrowTitle ?? "",
       due_tomorrow_amount: ctx.dueTomorrowAmount ?? 0,
       total_owed: ctx.totalOwedToUser,
+      net_savings_abs: Math.abs(ctx.netSavings),
+      expense_to_income_pct: ctx.monthlyIncome > 0
+        ? Math.round((ctx.monthlyExpenses / ctx.monthlyIncome) * 100)
+        : 100,
     };
   }
 }
