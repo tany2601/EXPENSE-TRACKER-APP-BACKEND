@@ -1,6 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
-import { Cron, SchedulerRegistry } from "@nestjs/schedule";
-import { CronJob, CronTime } from "cron";
+import { Cron, SchedulerRegistry, CronExpression } from "@nestjs/schedule";
 import { PrismaService } from "../../prisma/prisma.service";
 import { NotificationTemplateService } from "./notification-template.service";
 import { NotificationDeliveryService } from "./notification-delivery.service";
@@ -46,11 +45,12 @@ export class NotificationSchedulerService implements OnModuleInit {
     for (const s of schedules) {
       try {
         const job = this.schedulerRegistry.getCronJob(s.name);
-        job.setTime(new CronTime(s.expression));
+        // CronJob.setTime accepts a CronTime-like object — pass the expression string directly
+        (job as any).setTime(new (require("cron").CronTime)(s.expression));
         if (s.isActive) job.start(); else job.stop();
         this.logger.log(`Applied schedule [${s.name}]: ${s.expression}`);
       } catch {
-        // Job not registered yet (normal on cold start before decorators fire)
+        // Job not registered yet on cold start — normal
       }
     }
   }
@@ -106,8 +106,10 @@ export class NotificationSchedulerService implements OnModuleInit {
   }
 
   async updateSchedule(name: string, expression: string, isActive: boolean) {
-    // Validate cron expression by constructing a CronTime
-    try { new CronTime(expression); } catch {
+    // Validate cron expression
+    try {
+      new (require("cron").CronTime)(expression);
+    } catch {
       throw new Error(`Invalid cron expression: ${expression}`);
     }
 
@@ -119,7 +121,7 @@ export class NotificationSchedulerService implements OnModuleInit {
     // Apply immediately to the running job
     try {
       const job = this.schedulerRegistry.getCronJob(name);
-      job.setTime(new CronTime(expression));
+      (job as any).setTime(new (require("cron").CronTime)(expression));
       if (isActive) job.start(); else job.stop();
       this.logger.log(`Updated schedule [${name}]: ${expression} active=${isActive}`);
     } catch (e) {
