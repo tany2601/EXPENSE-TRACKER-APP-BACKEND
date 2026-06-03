@@ -8,14 +8,25 @@ import {
   Param,
   UseGuards,
   Query,
+  IsString,
+  IsIn,
 } from "@nestjs/common";
+import { IsNotEmpty } from "class-validator";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { AdminGuard } from "./guards/admin.guard";
 import { NotificationTemplateService } from "./services/notification-template.service";
 import { NotificationSchedulerService } from "./services/notification-scheduler.service";
+import { NotificationDeliveryService } from "./services/notification-delivery.service";
+import { DeviceTokenService } from "./services/device-token.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateTemplateDto } from "./dto/create-template.dto";
 import { UpdateTemplateDto } from "./dto/update-template.dto";
+
+class BroadcastDto {
+  @IsString() @IsNotEmpty() type: string;
+  @IsString() @IsNotEmpty() title: string;
+  @IsString() @IsNotEmpty() body: string;
+}
 
 @UseGuards(JwtAuthGuard, AdminGuard)
 @Controller("admin/notifications")
@@ -23,6 +34,8 @@ export class AdminNotificationsController {
   constructor(
     private templateService: NotificationTemplateService,
     private scheduler: NotificationSchedulerService,
+    private delivery: NotificationDeliveryService,
+    private deviceTokens: DeviceTokenService,
     private prisma: PrismaService
   ) {}
 
@@ -56,7 +69,35 @@ export class AdminNotificationsController {
     return { ok: true };
   }
 
-  // ── Delivery stats ─────────────────────────────────────────────────────────
+  // ── Broadcast: send to ALL users, bypasses dedup/segments ─────────────────
+
+  @Post("broadcast")
+  async broadcast(@Body() dto: BroadcastDto) {
+    const users = await this.prisma.user.findMany({
+      where: { deviceTokens: { some: {} } },
+      select: { id: true },
+    });
+
+    let sent = 0;
+
+    for (const user of users) {
+      const dedupKey = `broadcast_${dto.type}_${user.id}_${Date.now()}`;
+      const ok = await this.delivery.send({
+        userId: user.id,
+        templateId: null,
+        title: dto.title,
+        body: dto.body,
+        dedupKey,
+        deepLinkScreen: null,
+        deepLinkData: null,
+      });
+      if (ok) sent++;
+    }
+
+    return { ok: true, sent, total: users.length };
+  }
+
+  // ── Stats ──────────────────────────────────────────────────────────────────
 
   @Get("stats")
   async getStats() {
@@ -76,7 +117,10 @@ export class AdminNotificationsController {
     return this.prisma.notificationDelivery.findMany({
       orderBy: { sentAt: "desc" },
       take: limit ? parseInt(limit, 10) : 50,
-      include: { template: { select: { name: true } }, user: { select: { name: true, email: true } } },
+      include: {
+        template: { select: { name: true } },
+        user: { select: { name: true, email: true } },
+      },
     });
   }
 }
