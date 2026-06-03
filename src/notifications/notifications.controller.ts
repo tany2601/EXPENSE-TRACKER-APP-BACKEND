@@ -30,7 +30,7 @@ export class NotificationsController {
   @Post("token")
   registerToken(@Req() req: any, @Body() dto: RegisterTokenDto) {
     return this.deviceTokens.upsert(
-      req.user.sub,
+      req.user.id,
       dto.deviceId,
       dto.fcmToken,
       dto.platform
@@ -40,17 +40,16 @@ export class NotificationsController {
   // Remove token on logout
   @Delete("token/:deviceId")
   removeToken(@Req() req: any, @Param("deviceId") deviceId: string) {
-    return this.deviceTokens.removeForDevice(req.user.sub, deviceId);
+    return this.deviceTokens.removeForDevice(req.user.id, deviceId);
   }
 
   // Get notification preferences
   @Get("preferences")
   async getPreferences(@Req() req: any) {
     const pref = await this.prisma.notificationPreference.findUnique({
-      where: { userId: req.user.sub },
+      where: { userId: req.user.id },
     });
 
-    // Return defaults if not yet set
     return (
       pref ?? {
         pushEnabled: true,
@@ -68,8 +67,8 @@ export class NotificationsController {
   @Patch("preferences")
   async updatePreferences(@Req() req: any, @Body() dto: UpdatePreferenceDto) {
     return this.prisma.notificationPreference.upsert({
-      where: { userId: req.user.sub },
-      create: { userId: req.user.sub, ...dto },
+      where: { userId: req.user.id },
+      create: { userId: req.user.id, ...dto },
       update: dto,
     });
   }
@@ -78,7 +77,7 @@ export class NotificationsController {
   @Get("history")
   getHistory(@Req() req: any, @Query("limit") limit?: string) {
     return this.delivery.getHistoryForUser(
-      req.user.sub,
+      req.user.id,
       limit ? parseInt(limit, 10) : 20
     );
   }
