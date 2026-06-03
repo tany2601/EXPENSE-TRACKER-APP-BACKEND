@@ -8,10 +8,8 @@ import {
   Param,
   UseGuards,
   Query,
-  IsString,
-  IsIn,
 } from "@nestjs/common";
-import { IsNotEmpty } from "class-validator";
+import { IsString, IsNotEmpty } from "class-validator";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { AdminGuard } from "./guards/admin.guard";
 import { NotificationTemplateService } from "./services/notification-template.service";
