@@ -47,6 +47,7 @@ export class UsersService {
         name: true,
         phone: true,
         avatar: true,
+        isAdmin: true,
         createdAt: true,
       },
     });
