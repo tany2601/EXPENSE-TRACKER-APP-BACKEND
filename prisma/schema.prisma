@@ -1,84 +1,84 @@
-  generator client {
-    provider = "prisma-client-js"
-  }
+generator client {
+  provider = "prisma-client-js"
+}
 
-  datasource db {
-    provider  = "postgresql"
-    url       = env("DATABASE_URL")
-    directUrl = env("DIRECT_URL")
-  }
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
 
-  enum TransactionType {
-    INCOME
-    EXPENSE
-  }
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
 
-  model User {
-    id           String   @id @default(uuid())
-    email        String   @unique
-    name         String
-    phone        String?
-    avatar       String?
-    passwordHash String
-    createdAt    DateTime @default(now())
-    updatedAt    DateTime @updatedAt
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  phone        String?
+  avatar       String?
+  passwordHash String
+  isAdmin      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-    transactions Transaction[]
-    contacts     Contact[]
-    categories Category[]
-    sessions Session[]
-  }
+  transactions           Transaction[]
+  contacts               Contact[]
+  categories             Category[]
+  sessions               Session[]
+  deviceTokens           DeviceToken[]
+  notificationDeliveries NotificationDelivery[]
+  notificationPreference NotificationPreference?
+}
 
-  model Transaction {
-    id        String   @id @default(uuid())
-    userId    String
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+model Transaction {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    title     String
-    amount    Float
-    type      TransactionType
-    category  String
+  title     String
+  amount    Float
+  type      TransactionType
+  category  String
 
-    date      DateTime
-    dueDate   DateTime?
-    isPaid    Boolean @default(true)
+  date      DateTime
+  dueDate   DateTime?
+  isPaid    Boolean @default(true)
 
-    clientName    String?
-    projectTitle  String?
-    tags          String[] @default([])
-    notes         String?
-    receiptImage  String?
-    receiptPublicId  String?
+  clientName    String?
+  projectTitle  String?
+  tags          String[] @default([])
+  notes         String?
+  receiptImage  String?
+  receiptPublicId  String?
 
-    splits    TransactionSplit[]
+  splits    TransactionSplit[]
 
-    // ✅ NEW: client timestamp used for conflict checks
-    clientUpdatedAt DateTime?
+  clientUpdatedAt DateTime?
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-      // Soft delete (tombstone)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   deletedAt         DateTime?
   deletedByDeviceId String?
   reminderDismissedAt DateTime?
+}
 
-  }
+model TransactionSplit {
+  id             String   @id @default(uuid())
+  transactionId  String
+  transaction    Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 
+  participantId  String
+  participant    Contact @relation(fields: [participantId], references: [id])
 
+  amount         Float
+  isPaid         Boolean @default(false)
 
-  model TransactionSplit {
-    id             String   @id @default(uuid())
-    transactionId  String
-    transaction    Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-
-    participantId  String
-    participant    Contact @relation(fields: [participantId], references: [id])
-
-    amount         Float
-    isPaid         Boolean @default(false)
-
-    createdAt      DateTime @default(now())
-  }
+  createdAt      DateTime @default(now())
+}
 
 model Contact {
   id        String   @id @default(uuid())
@@ -89,11 +89,9 @@ model Contact {
 
   splits    TransactionSplit[]
 
-  // ✅ conflict + sync
   clientUpdatedAt DateTime?
   updatedAt       DateTime @updatedAt
 
-  // ✅ tombstone
   deletedAt         DateTime?
   deletedByDeviceId String?
 
@@ -112,37 +110,32 @@ model Category {
   user      User?    @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
 
-  // ✅ conflict + sync
   clientUpdatedAt DateTime?
   updatedAt       DateTime @updatedAt
 
-  // ✅ tombstone
   deletedAt         DateTime?
   deletedByDeviceId String?
 
   @@unique([name, userId])
 }
 
+model EmailOtp {
+  email      String
+  type       String
+  otpHash    String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
 
-  model EmailOtp {
-    email      String
-    type       String   // "PASSWORD_RESET" | "EMAIL_VERIFY"
-    otpHash    String
-    expiresAt  DateTime
-    createdAt  DateTime @default(now())
-
-    @@id([email, type])
-  }
+  @@id([email, type])
+}
 
 model OtpThrottle {
   email String
-  type  String // "PASSWORD_RESET" | "EMAIL_VERIFY"
+  type  String
 
-  // verify attempts
   failedVerifyCount Int      @default(0)
   verifyLockedUntil DateTime?
 
-  // send attempts (rate limiting)
   sendCount         Int      @default(0)
   sendWindowStart   DateTime?
   sendLockedUntil   DateTime?
@@ -153,7 +146,7 @@ model OtpThrottle {
 }
 
 model LoginThrottle {
-  email           String   @id // normalized email
+  email           String   @id
 
   failedCount     Int      @default(0)
   windowStart     DateTime?
@@ -167,10 +160,8 @@ model Session {
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // hashed refresh token (never store raw)
   refreshTokenHash String
 
-  // optional but strongly recommended
   deviceId        String?
   userAgent       String?
   ip              String?
@@ -182,4 +173,87 @@ model Session {
 
   @@index([userId])
   @@index([deviceId])
+}
+
+// ─── Notification Engine ────────────────────────────────────────────
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId  String
+  fcmToken  String
+  platform  String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+}
+
+model NotificationTemplate {
+  id   String @id @default(uuid())
+  name String
+
+  type            String
+  triggerCategory String
+
+  title String
+  body  String
+
+  condition String?
+
+  deepLinkScreen String?
+  deepLinkData   String?
+
+  dedupWindowDays Int @default(7)
+
+  isActive  Boolean @default(true)
+  priority  String  @default("NORMAL")
+  sortOrder Int     @default(0)
+
+  deliveries NotificationDelivery[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model NotificationDelivery {
+  id         String @id @default(uuid())
+  userId     String
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  templateId String?
+  template   NotificationTemplate? @relation(fields: [templateId], references: [id])
+
+  dedupKey String @unique
+
+  title String
+  body  String
+
+  channel String @default("PUSH")
+  status  String @default("SENT")
+
+  sentAt   DateTime  @default(now())
+  openedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model NotificationPreference {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  pushEnabled     Boolean @default(true)
+  emailEnabled    Boolean @default(false)
+
+  insightsEnabled    Boolean @default(true)
+  alertsEnabled      Boolean @default(true)
+  engagementEnabled  Boolean @default(true)
+
+  quietHoursStart Int?
+  quietHoursEnd   Int?
+
+  updatedAt DateTime @updatedAt
 }
