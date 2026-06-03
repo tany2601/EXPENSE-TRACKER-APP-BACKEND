@@ -187,6 +187,58 @@ async function main() {
       sortOrder: 5,
     },
 
+    // ── REENGAGEMENT_BATCH — users inactive for 3-30 days ────────────────────
+    {
+      name: "We miss you",
+      type: "ENGAGEMENT",
+      triggerCategory: "REENGAGEMENT_BATCH",
+      title: "Hey {{name}}, long time 👋",
+      body: "Your finances have been running without a check-in. Take a look?",
+      deepLinkScreen: "/home",
+      dedupWindowDays: 3,
+      sortOrder: 1,
+    },
+    {
+      name: "Untracked expenses",
+      type: "ENGAGEMENT",
+      triggerCategory: "REENGAGEMENT_BATCH",
+      title: "Anything to add? 🧾",
+      body: "You haven't logged any expenses in a while. Don't let them pile up.",
+      deepLinkScreen: "/add",
+      dedupWindowDays: 3,
+      sortOrder: 2,
+    },
+    {
+      name: "Spending mystery",
+      type: "ENGAGEMENT",
+      triggerCategory: "REENGAGEMENT_BATCH",
+      title: "Where did the money go? 🔍",
+      body: "A few untracked days can mess up the whole picture. Quick check?",
+      deepLinkScreen: "/home",
+      dedupWindowDays: 3,
+      sortOrder: 3,
+    },
+    {
+      name: "Splits pending reengagement",
+      type: "ENGAGEMENT",
+      triggerCategory: "REENGAGEMENT_BATCH",
+      title: "Money might be waiting 💸",
+      body: "You've been away a while. Someone might owe you money.",
+      deepLinkScreen: "/receivables",
+      dedupWindowDays: 3,
+      sortOrder: 4,
+    },
+    {
+      name: "Come back nudge",
+      type: "ENGAGEMENT",
+      triggerCategory: "REENGAGEMENT_BATCH",
+      title: "Rupexo misses you 🥺",
+      body: "Your spending tracker works better when you're here. Come back?",
+      deepLinkScreen: "/home",
+      dedupWindowDays: 3,
+      sortOrder: 5,
+    },
+
     // ── MONTHLY_MILESTONES ────────────────────────────────────────────────────
     {
       name: "Savings milestone",
